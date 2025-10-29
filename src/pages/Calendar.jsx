@@ -15,12 +15,22 @@ const getDaysInMonth = (year, month) => {
 };
 
 const getMonthStartDay = (year, month) => {
-    return new Date(year, month, 1).getDay(); 
+    return new Date(year, month, 1).getDay();
 };
 
+// ✅ [FIX] ฟังก์ชันสำหรับแปลง Local Date เป็น "YYYY-MM-DD" โดยไม่สน Timezone
+const getLocalDateString = (dateObj) => {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+
 export default function Calendar() {
-    const [currentDate, setCurrentDate] = useState(new Date('2025-10-01')); 
-    
+    // ⭐️ [แก้ไข] ตั้งค่าเริ่มต้นเป็นเดือนตุลาคม 2025 เพื่อให้ตรงกับตัวอย่าง
+    const [currentDate, setCurrentDate] = useState(new Date('2025-10-01'));
+
     // State สำหรับเก็บข้อมูลตาราง
     const [scheduleMap, setScheduleMap] = useState(new Map());
     const [isLoading, setIsLoading] = useState(true);
@@ -33,28 +43,42 @@ export default function Calendar() {
             setError(null);
             try {
                 const response = await axios.get(
-                    // (Endpoint นี้ต้องตรงกับ calender_bp.route("/api/exam-plans/"))
-                    // (ซึ่งในโค้ด Flask ของคุณคือ /calender/api/exam-plans/
-                    // แต่ในโค้ด React เดิมคุณใช้ /api/exam-plans/
-                    // ผมจะยึดตามโค้ด React เดิมของคุณ แต่ถ้าไม่เจอลองแก้เป็น "http://localhost:5000/calender/api/exam-plans/")
                     "http://localhost:5000/calender/api/exam-plans/", // <-- ใช้ URL ที่ถูกต้องตาม Blueprint
                     { withCredentials: true }
                 );
-                
+
                 const newMap = new Map();
-                
+
                 response.data.forEach(plan => {
-                    // plan.generated_schedule คือ [ {date: ..., subject: ...}, ... ]
-                    plan.generated_schedule.forEach(slot => { // เปลี่ยนชื่อตัวแปรเป็น slot
-                    
-                        // ดึง list ของ slot ที่มีอยู่เดิมในวันที่นี้
-                        const existingSlots = newMap.get(slot.date) || [];
+                    const scheduleSlots = plan.study_plan || plan.generated_schedule;
+
+                    if (scheduleSlots && Array.isArray(scheduleSlots)) {
+                        scheduleSlots.forEach(slot => {
+                            const existingSlots = newMap.get(slot.date) || [];
+                            newMap.set(slot.date, [...existingSlots, slot]);
+                        });
+                    } else {
+                        console.warn(`Plan (ID: ${plan._id || 'N/A'}) ไม่มี 'study_plan' หรือ 'generated_schedule' ที่เป็น Array`);
+                        console.log("Data ที่มีปัญหา:", scheduleSlots);
+                    }
+
+                    // [เพิ่มใหม่] ตรวจสอบและเพิ่มวันสอบ (exam_date)
+                    if (plan.exam_date && plan.exam_title) {
+                        const examDateString = plan.exam_date; // "YYYY-MM-DD"
                         
-                        // ✅ [FIX 1] แก้ไขบรรทัดนี้: เพิ่ม slot ทั้ง object ลงไปใน array
-                        newMap.set(slot.date, [...existingSlots, slot]);
-                    });
+                        const examSlot = {
+                            date: examDateString,
+                            subject: `สอบ: ${plan.exam_title}`,
+                            startTime: "!!",
+                            endTime: "",
+                            isExam: true
+                        };
+
+                        const existingSlots = newMap.get(examDateString) || [];
+                        newMap.set(examDateString, [examSlot, ...existingSlots]);
+                    }
                 });
-                
+
                 setScheduleMap(newMap);
                 console.log("✅ Fetched and mapped schedule:", newMap);
 
@@ -65,7 +89,8 @@ export default function Calendar() {
                     console.error("Error status:", err.response.status);
                     setError(`ไม่สามารถดึงข้อมูล: ${err.response.data.message || err.message}`);
                 } else {
-                    setError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+                    console.error("JavaScript Error during processing:", err.message);
+                    setError(`เกิดข้อผิดพลาดในการประมวลผลข้อมูล: ${err.message}`);
                 }
             } finally {
                 setIsLoading(false);
@@ -73,29 +98,24 @@ export default function Calendar() {
         };
 
         fetchSchedule();
-    }, []); 
+    }, []); // <-- ดึงข้อมูลครั้งเดียวตอนเริ่ม
 
     const calendarGrid = useMemo(() => {
         const year = currentDate.getFullYear();
-        const month = currentDate.getMonth(); 
-        
+        const month = currentDate.getMonth();
+
         const daysInMonth = getDaysInMonth(year, month);
-        const startDay = getMonthStartDay(year, month); 
+        const startDay = getMonthStartDay(year, month);
 
         const grid = [];
-        
-        // ช่องว่างก่อนวันที่ 1
         for (let i = 0; i < startDay; i++) {
             grid.push({ date: null, isCurrentMonth: false });
         }
-
-        // วันที่ในเดือน
         for (const day of daysInMonth) {
             grid.push({ date: day, isCurrentMonth: true });
         }
-        
         return grid;
-    }, [currentDate]); 
+    }, [currentDate]);
 
     const goToNextMonth = () => {
         setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
@@ -109,37 +129,13 @@ export default function Calendar() {
 
     return (
         <div className="flex bg-gray-50 min-h-screen">
-            {/* Sidebar (ตามโค้ดเดิมของคุณ) */}
-            <div className="w-64 bg-white shadow-md">
-                <div className="p-6">
-                    <h2 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
-                        <svg className="w-8 h-8" /* ไอคอนรูปปฏิทิน */ fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        Exam Planner
-                    </h2>
-                </div>
-                <nav className="mt-6 px-4">
-                    <a href="/dashboard" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-100 text-gray-700 font-medium">Dashboard</a>
-                    <a href="/calendar" className="block py-2.5 px-4 rounded transition duration-200 bg-blue-100 text-blue-700 font-bold">Calendar</a>
-                    <a href="/subject" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-100 text-gray-700 font-medium">Subject</a>
-                    <a href="/time" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-100 text-gray-700 font-medium">Time</a>
-                    
-                    {/* (ปุ่ม Add New ควรใช้ Link ของ React Router ถ้ามี) */}
-                    <a href="/create-plan" className="mt-4 w-full text-center block bg-blue-600 text-white py-2.5 px-4 rounded-lg font-semibold hover:bg-blue-700 transition">
-                        Add New +
-                    </a>
-                </nav>
-                <div className="absolute bottom-0 left-0 w-64 p-6">
-                    <a href="/logout" className="text-gray-600 hover:text-red-500 font-medium">Log Out</a>
-                </div>
-            </div>
+            {/* ⭐️ [คืนค่า] กลับไปใช้แบบเดิม */}
+            { <Sidebar /> } {/* ปิดไว้ก่อน */}
 
-            {/* Main Content */}
             <div className="flex-1 p-4 sm:p-8">
-                <div 
+                <div
                     className="max-w-5xl mx-auto bg-white rounded-2xl shadow-lg p-6 sm:p-8"
-                    style={{ background: 'linear-gradient(to bottom right, #eff6ff, #f9faff)' }} 
+                    style={{ background: 'linear-gradient(to bottom right, #eff6ff, #f9faff)' }}
                 >
                     {/* Calendar Header (ตามภาพ) */}
                     <h1 className="text-4xl font-bold text-center text-blue-800 mb-8">
@@ -148,7 +144,7 @@ export default function Calendar() {
 
                     {/* Navigation */}
                     <div className="flex items-center justify-between mb-4">
-                        <button 
+                        <button
                             onClick={goToPrevMonth}
                             className="p-2 rounded-full hover:bg-gray-200 transition"
                         >
@@ -157,7 +153,7 @@ export default function Calendar() {
                         <h2 className="text-2xl font-semibold text-gray-800">
                             {currentDate.toLocaleString('th-TH', { month: 'long', year: 'numeric' })}
                         </h2>
-                        <button 
+                        <button
                             onClick={goToNextMonth}
                             className="p-2 rounded-full hover:bg-gray-200 transition"
                         >
@@ -184,32 +180,36 @@ export default function Calendar() {
                                     return <div key={index} className="h-28 sm:h-32 rounded-lg bg-gray-50/50"></div>; // ช่องว่าง
                                 }
 
-                                // แปลงเป็น YYYY-MM-DD
-                                const dateString = day.date.toISOString().split('T')[0];
+                                const dateString = getLocalDateString(day.date);
                                 const daySchedule = scheduleMap.get(dateString); // ดึงข้อมูลจาก Map
 
                                 return (
-                                    <div 
-                                        key={index} 
+                                    <div
+                                        key={index}
                                         className="h-28 sm:h-32 rounded-lg border border-gray-200 bg-white p-2 flex flex-col overflow-hidden"
                                     >
                                         <span className="font-semibold text-gray-800">{day.date.getDate()}</span>
-                                        
+
                                         {/* Show schedule slots */}
                                         {daySchedule && (
                                             <div className="mt-1 space-y-1 overflow-y-auto pr-1">
-                                                {/* ✅ [FIX 2] แก้ไขการแสดงผล */}
-                                                {daySchedule.map((slot, i) => (
-                                                    <div 
-                                                        key={i}
-                                                        className="text-xs p-1.5 bg-blue-100 text-blue-800 rounded-md truncate font-medium"
-                                                        // (แสดงเวลาเริ่มต้น-สิ้นสุด เมื่อเอาเมาส์ชี้)
-                                                        title={`${slot.subject} (${slot.startTime} - ${slot.endTime})`}
-                                                    >
-                                                        {/* (แสดงเวลาเริ่มต้น และ ชื่อวิชา) */}
-                                                        {`${slot.startTime} ${slot.subject}`}
-                                                    </div>
-                                                ))}
+                                                {daySchedule.map((slot, i) => {
+                                                    const isExamSlot = slot.isExam === true;
+                                                    
+                                                    const slotClass = isExamSlot
+                                                        ? "text-xs p-1.5 bg-red-100 text-red-800 rounded-md truncate font-bold" // Style วันสอบ
+                                                        : "text-xs p-1.5 bg-blue-100 text-blue-800 rounded-md truncate font-medium"; // Style วันอ่าน
+
+                                                    return (
+                                                        <div
+                                                            key={i}
+                                                            className={slotClass}
+                                                            title={isExamSlot ? slot.subject : `${slot.subject} (${slot.startTime} - ${slot.endTime})`}
+                                                        >
+                                                            {isExamSlot ? slot.subject : `${slot.subject}`}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         )}
                                     </div>

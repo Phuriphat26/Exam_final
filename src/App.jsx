@@ -9,13 +9,11 @@ import Home from "./pages/Home";
 import AddNew from "./pages/AddNew";
 import Profile from "./pages/Profile";
 // Import your PrivateRoute component
-import PrivateRoute from "./components/PrivateRoute"; // Assuming this is the path
 
 import Subject from './pages/Subject';
 import ExamPlanDetail from './pages/ExamPlanDetail';
 import Calendar from "./pages/Calendar";
 import ExamPlanList from './pages/ExamPlanList';
-
 import './index.css';
 
 function App() {
@@ -26,17 +24,14 @@ function App() {
         <Route path="/" element={<PreDetail />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-
-        {/* Private Routes Wrapper */}
-        <Route element={<PrivateRoute />}>
-          <Route path="/home" element={<Home />} />
-          <Route path="/add" element={<AddNew />} />
-          <Route path="/Profile" element={<Profile />} />
-          <Route path="/subject" element={<Subject />} />
-          <Route path="/ExamPlanDetail" element={<ExamPlanDetail />} />
-          <Route path="/Calendar" element={<Calendar />} />
-          <Route path="/ExamPlanList" element={<ExamPlanList />} />
-        </Route>
+        <Route path="/home" element={<Home />} />
+        <Route path="/add" element={<AddNew />} />
+        <Route path="/Profile" element={<Profile />} />
+        <Route path="/subject" element={<Subject />} />
+        <Route path="/ExamPlanDetail" element={<ExamPlanDetail />} />
+        <Route path="/Calendar" element={<Calendar />} />
+        <Route path="/ExamPlanList" element={<ExamPlanList />} />
+        
       </Routes>
     </Router> // Remove the extra </Router> from here
   );

@@ -1,141 +1,338 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import Sidebar from '../components/Sidebar'; // Adjust the path to your Sidebar component
+import { useParams, Link } from 'react-router-dom';
+import Sidebar from '../components/Sidebar';
+import { ArrowLeftIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
 
-export default function ExamPlanDetail() {
-    const { id } = useParams(); // Get the plan ID from the URL
+// Import date-fns สำหรับปฏิทิน (ต้อง npm install date-fns)
+import { format, getDaysInMonth, startOfMonth, getDay, addMonths, subMonths, isSameDay } from 'date-fns';
+import { th } from 'date-fns/locale'; // Import ภาษาไทย
+
+// --- (Helper Functions) ---
+
+// 1. Function แปลง Date object เป็น "30 ตุลาคม 2568"
+const formatExamDate = (date) => {
+    if (!date || isNaN(date)) return "ไม่ระบุวันที่";
+    return format(date, 'd MMMM yyyy', { locale: th });
+};
+
+// 2. Function แปลง Date object เป็น "YYYY-MM-DD" (สำหรับเทียบ key)
+const toDateString = (date) => {
+    return format(date, 'yyyy-MM-dd');
+};
+
+// 3. Function แปลงเวลา "09:00" / "12:00" เป็น "09:00 - 12:00"
+const formatExamTime = (start, end) => {
+    if (!start || !end) return "";
+    return `${start} - ${end}`; 
+};
+
+
+// --- (Sub-components) ---
+
+// 1. Donut Chart (เวอร์ชัน SVG ที่แก้ไขแล้ว)
+const DonutChart = ({ percentage, label, color }) => {
+    // --- (ส่วนคำนวณ) ---
+    const radius = 60; // รัศมี
+    const strokeWidth = 12; // ความหนาของเส้น
+    const normalizedRadius = radius - strokeWidth / 2;
+    const circumference = normalizedRadius * 2 * Math.PI;
+    
+    // ป้องกันค่า % ที่ผิดพลาด (ให้อยู่ระหว่าง 0-100)
+    const safePercentage = Math.max(0, Math.min(percentage || 0, 100));
+    const offset = circumference - (safePercentage / 100) * circumference;
+
+    // --- (ส่วนสี) ---
+    // ตัวแปรนี้จะถูกใช้โดย <circle> ใน SVG
+    const ringColor = 
+        color === 'blue' ? 'stroke-blue-500' :
+        color === 'red' ? 'stroke-red-400' : 'stroke-gray-300';
+    
+    const bgColor = 
+        color === 'blue' ? 'bg-blue-50' :
+        color === 'red' ? 'bg-red-50' : 'bg-gray-50';
+
+    return (
+        <div className={`flex flex-col items-center justify-center p-6 rounded-2xl shadow-sm ${bgColor}`}>
+            <div className="relative w-40 h-40">
+                <svg
+                    height="100%"
+                    width="100%"
+                    viewBox="0 0 140 140" // 140 = (radius + padding) * 2
+                    className="transform -rotate-90" // หมุน 90 องศา ให้ 0% เริ่มที่ด้านบน
+                >
+                    {/* 1. วงกลมพื้นหลัง (สีเทาอ่อน) */}
+                    <circle
+                        stroke="#E5E7EB" // bg-gray-200
+                        fill="transparent"
+                        strokeWidth={strokeWidth}
+                        r={normalizedRadius}
+                        cx={70} // กึ่งกลาง (140/2)
+                        cy={70} // กึ่งกลาง (140/2)
+                    />
+                    {/* 2. วงกลม % (ทับอยู่ด้านบน) */}
+                    <circle
+                        className={`${ringColor} transition-all duration-500`}
+                        fill="transparent"
+                        strokeWidth={strokeWidth}
+                        strokeDasharray={`${circumference} ${circumference}`}
+                        // (นี่คือจุดที่ใช้ตัวแปร offset)
+                        style={{ strokeDashoffset: offset }} 
+                        r={normalizedRadius}
+                        cx={70}
+                        cy={70}
+                        strokeLinecap="round" // ทำให้ปลายเส้นมน
+                    />
+                </svg>
+                {/* ตัวเลข % ที่แสดงตรงกลาง */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-4xl font-bold text-gray-800">{safePercentage}%</span>
+                </div>
+            </div>
+            
+            <span className="mt-4 text-lg font-semibold text-gray-700">{label}</span>
+        </div>
+    );
+};
+
+// 2. Calendar Grid
+const StudyCalendar = ({ studySlots = [], examDateStr }) => {
+    //
+    // --- (A) สมมติฐานข้อมูล ---
+    // 1. examDateStr: "2025-10-30T00:00:00"
+    // 2. studySlots: [
+    //      { date: "2025-10-06", status: "read" },
+    //      { date: "2025-10-08", status: "read" },
+    //      { date: "2025-10-13", status: "not_read" },
+    //      ...
+    //    ]
+    //
+    const examDate = new Date(examDateStr);
+    const [currentMonth, setCurrentMonth] = useState(startOfMonth(examDate));
+
+    // สร้าง Map เพื่อค้นหา Status ได้เร็ว
+    const statusMap = new Map();
+    studySlots.forEach(slot => {
+        statusMap.set(slot.date, slot.status);
+    });
+
+    // สร้างตารางปฏิทิน
+    const daysInMonth = getDaysInMonth(currentMonth);
+    const startDayOfWeek = getDay(currentMonth); // 0=Sun, 1=Mon...
+    const dayHeaders = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+
+    const blankDays = Array(startDayOfWeek).fill(null);
+    const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+    // Render Logic
+    const renderDay = (day) => {
+        if (!day) {
+            return <div key={`blank-${Math.random()}`} className="h-12 w-12"></div>;
+        }
+
+        const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+        const dateString = toDateString(date);
+        
+        const status = statusMap.get(dateString);
+        const isExamDay = isSameDay(date, examDate);
+
+        let dayClasses = "h-12 w-12 flex items-center justify-center rounded-lg ";
+        if (isExamDay) {
+            dayClasses += "bg-yellow-200 text-yellow-800 font-bold";
+        } else if (status === 'read') {
+            dayClasses += "bg-green-200 text-green-800";
+        } else if (status === 'not_read') {
+            dayClasses += "bg-red-200 text-red-800";
+        } else {
+            dayClasses += "bg-gray-200 text-gray-700"; // วันที่ไม่มีในแผน
+        }
+
+        return (
+            <div key={dateString} className={dayClasses}>
+                {day}
+            </div>
+        );
+    };
+
+    return (
+        <div className="bg-blue-50 p-6 rounded-2xl shadow-sm">
+            {/* Header: October 2025 */}
+            <div className="flex justify-between items-center mb-4">
+                <button 
+                    onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                    className="p-2 rounded-full hover:bg-blue-100"
+                >
+                    <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
+                </button>
+                <h3 className="text-xl font-bold text-gray-800">
+                    {format(currentMonth, 'MMMM yyyy', { locale: th })}
+                </h3>
+                <button 
+                    onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                    className="p-2 rounded-full hover:bg-blue-100"
+                >
+                    <ChevronRightIcon className="h-5 w-5 text-gray-600" />
+                </button>
+            </div>
+            
+            {/* Grid ปฏิทิน */}
+            <div className="grid grid-cols-7 gap-2 text-center">
+                {/* หัว (จ อ พ...) */}
+                {dayHeaders.map(header => (
+                    <div key={header} className="font-semibold text-gray-500 text-sm">
+                        {header}
+                    </div>
+                ))}
+                
+                {/* วันที่ (ช่องว่าง + วันที่) */}
+                {blankDays.map(renderDay)}
+                {daysArray.map(renderDay)}
+            </div>
+        </div>
+    );
+};
+
+// --- (Main Component) ---
+
+export default function ExamPlanDetailPage() {
+    const { planId } = useParams(); // ดึง ID จาก URL (เช่น /exam-plan/THIS_ID)
     const [plan, setPlan] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [currentDate, setCurrentDate] = useState(new Date());
+    const [error, setError] = useState(null);
 
-    // Fetch the specific exam plan when the component mounts or the ID changes
     useEffect(() => {
-        const fetchPlan = async () => {
+        const fetchPlanDetail = async () => {
+            if (!planId) return;
             setIsLoading(true);
-            setError('');
             try {
-                const response = await axios.get(`http://localhost:5000/api/exam-plan/${id}`, {
-                    withCredentials: true,
-                });
+                // --- (สำคัญ) ---
+                // Endpoint นี้ต้องส่งข้อมูลแบบละเอียด
+                const response = await axios.get(
+                    `http://localhost:5000/calender/api/exam-plans/${planId}`, 
+                    { withCredentials: true }
+                );
+                
+                // --- (โครงสร้างข้อมูลที่คาดหวังจาก API) ---
+                // response.data = {
+                //   _id: "...",
+                //   exam_title: "System Analysis and Designs",
+                //   exam_date: "2025-10-30T00:00:00",
+                //   exam_start_time: "09:00",
+                //   exam_end_time: "12:00",
+                //   progress_percentage: 20, // (20%)
+                //   study_slots: [
+                //     { date: "2025-10-06", status: "read" },
+                //     { date: "2025-10-13", status: "not_read" },
+                //     ...
+                //   ]
+                // }
+                
                 setPlan(response.data);
+                console.log("Fetched plan detail:", response.data);
+
             } catch (err) {
-                console.error("Failed to fetch exam plan:", err);
-                setError(err.response?.data?.message || "Could not load the exam plan.");
+                console.error("❌ Failed to fetch plan detail:", err);
+                setError("ไม่สามารถดึงข้อมูลแผนการสอบได้");
             } finally {
                 setIsLoading(false);
             }
         };
 
-        fetchPlan();
-    }, [id]);
-
-    // Process the study plan into a Map for quick lookups by date (YYYY-MM-DD)
-    const scheduleMap = useMemo(() => {
-        if (!plan?.study_plan) return new Map();
-        
-        const map = new Map();
-        plan.study_plan.forEach(item => {
-            map.set(item.date, item);
-        });
-        return map;
-    }, [plan]);
-
-    // Function to get all 7 days of the week, starting from Monday
-    const getWeekDays = (date) => {
-        const startOfWeek = new Date(date);
-        const day = startOfWeek.getDay();
-        const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Adjust so Monday is the first day
-        startOfWeek.setDate(diff);
-
-        return Array.from({ length: 7 }).map((_, i) => {
-            const weekDay = new Date(startOfWeek);
-            weekDay.setDate(startOfWeek.getDate() + i);
-            return weekDay;
-        });
-    };
-    
-    const weekDays = getWeekDays(currentDate);
-    const weekDaysHeaders = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-    const changeWeek = (amount) => {
-        setCurrentDate(prev => {
-            const newDate = new Date(prev);
-            newDate.setDate(prev.getDate() + amount);
-            return newDate;
-        });
-    };
+        fetchPlanDetail();
+    }, [planId]);
 
     if (isLoading) {
-        return <div className="flex justify-center items-center h-screen">Loading Schedule...</div>;
+        return <div className="flex h-screen items-center justify-center">กำลังโหลด...</div>;
     }
 
     if (error) {
-        return <div className="flex justify-center items-center h-screen text-red-500">{error}</div>;
+        return <div className="flex h-screen items-center justify-center">{error}</div>;
     }
-    
+
+    if (!plan) {
+        return <div className="flex h-screen items-center justify-center">ไม่พบข้อมูล</div>;
+    }
+
+    // คำนวณ % ที่เหลือ
+    const remainingPercentage = 100 - (plan.progress_percentage || 0);
+
     return (
-        <div className="flex bg-gray-50 min-h-screen">
+        <div className="flex bg-gray-100 min-h-screen">
             <Sidebar />
+            
             <div className="flex-1 p-4 sm:p-8">
-                <div className="max-w-7xl mx-auto">
-                    <div className="flex justify-between items-center mb-6">
-                        <div>
-                           <h1 className="text-3xl font-bold text-gray-800">{plan?.exam_title}</h1>
-                           <p className="text-gray-500">
-                                Exam Date: {new Date(plan?.exam_date + 'T00:00:00').toLocaleDateString('en-US', { dateStyle: 'long' })}
-                           </p>
-                        </div>
-                        <Link to="/exam-planner" className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition">
-                            Back to All Plans
+                <div className="max-w-6xl mx-auto">
+                    
+                    {/* Header: "ติดตามความคืบหน้าการอ่าน" */}
+                    <div className="flex items-center mb-6">
+                        <Link to="/exam-plans" className="p-2 rounded-full hover:bg-gray-200 mr-2">
+                            <ArrowLeftIcon className="h-6 w-6 text-gray-700" />
                         </Link>
+                        <h1 className="text-3xl font-bold text-gray-800">
+                            ติดตามความคืbหน้าการอ่าน
+                        </h1>
                     </div>
 
-                    {/* Week Navigation */}
-                    <div className="flex items-center justify-between p-4 bg-white rounded-t-xl shadow">
-                        <button onClick={() => changeWeek(-7)} className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition">
-                            &lt; Previous
-                        </button>
-                        <h2 className="text-xl font-semibold text-center">
-                            {weekDays[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - {weekDays[6].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                        </h2>
-                        <button onClick={() => changeWeek(7)} className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition">
-                            Next &gt;
-                        </button>
-                    </div>
-
-                    {/* Schedule Grid */}
-                    <div className="grid grid-cols-7 bg-white rounded-b-xl shadow border-t">
-                        {/* Day Headers */}
-                        {weekDaysHeaders.map(header => (
-                            <div key={header} className="text-center font-bold p-3 border-b border-r border-gray-200 bg-gray-100">
-                                {header}
-                            </div>
-                        ))}
+                    {/* Main Content Card */}
+                    <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-lg">
                         
-                        {/* Day Cells */}
-                        {weekDays.map((day) => {
-                            const dateString = day.toISOString().split('T')[0]; // Format to 'YYYY-MM-DD'
-                            const session = scheduleMap.get(dateString);
-                            const isToday = new Date().toISOString().split('T')[0] === dateString;
-
-                            return (
-                                <div key={dateString} className={`min-h-[120px] p-2 border-r border-b border-gray-200 ${isToday ? 'bg-blue-50' : ''}`}>
-                                    <div className={`font-bold text-center mb-2 ${isToday ? 'text-blue-600' : 'text-gray-600'}`}>
-                                        {day.getDate()}
-                                    </div>
-                                    {session ? (
-                                        <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-800 p-2 rounded-md text-sm">
-                                            <p className="font-bold truncate">{session.subject}</p>
-                                            <p className="text-xs">{session.startTime} - {session.endTime}</p>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center text-gray-400 text-xs mt-4">-</div>
-                                    )}
+                        {/* Title & Date */}
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-start mb-6 gap-4">
+                            <div>
+                                <h2 className="text-3xl font-bold text-gray-900">
+                                    {plan.exam_title}
+                                </h2>
+                                <p className="text-lg text-gray-600 mt-1">
+                                    วันที่สอบ: {formatExamDate(new Date(plan.exam_date))} 
+                                    เวลา {formatExamTime(plan.exam_start_time, plan.exam_end_time)}
+                                </p>
+                            </div>
+                            {/* Legend (คำอธิบายสี) */}
+                            <div className="flex flex-row sm:flex-col flex-wrap gap-2 text-sm">
+                                <div className="flex items-center">
+                                    <span className="h-4 w-4 rounded-full bg-green-200 mr-2"></span>
+                                    <span>อ่านแล้ว</span>
                                 </div>
-                            );
-                        })}
+                                <div className="flex items-center">
+                                    <span className="h-4 w-4 rounded-full bg-red-200 mr-2"></span>
+                                    <span>ยังไม่ได้อ่าน</span>
+                                </div>
+                                <div className="flex items-center">
+                                    <span className="h-4 w-4 rounded-full bg-yellow-200 mr-2"></span>
+                                    <span>วันสอบ</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Calendar & Stats Grid */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            
+                            {/* Calendar (คอลัมน์ซ้าย) */}
+                            <div className="lg:col-span-2">
+                                <h3 className="text-xl font-semibold text-gray-800 mb-4">
+                                    ตารางการอ่าน
+                                </h3>
+                                <StudyCalendar 
+                                    studySlots={plan.study_slots} 
+                                    examDateStr={plan.exam_date}
+                                />
+                            </div>
+
+                            {/* Stats (คอลัมน์ขวา) */}
+                            <div className="flex flex-col space-y-6">
+                                <DonutChart 
+                                    percentage={plan.progress_percentage || 0} 
+                                    label="Level Up"
+                                    color="blue"
+                                />
+                                <DonutChart 
+                                    percentage={remainingPercentage}
+                                    label="บทที่ยังไม่ได้อ่าน"
+                                    color="red"
+                                />
+                            </div>
+
+                        </div>
                     </div>
                 </div>
             </div>
