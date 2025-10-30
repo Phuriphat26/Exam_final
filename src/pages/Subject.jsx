@@ -117,12 +117,12 @@ export default function CoursePlannerAddNew() {
                                     <div className="lg:col-span-2">
                                         <label className="block text-sm font-medium text-gray-700 mb-2">จำนวนบท</label>
                                         <input
-                                            type="text"
+                                            type="number"
                                             name="courseCode"
                                             value={subject.courseCode}
                                             onChange={e => handleSubjectChange(index, e)}
                                             className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
-                                            placeholder="e.g., CS101"
+                                            placeholder="3,5"
                                         />
                                     </div>
                                     

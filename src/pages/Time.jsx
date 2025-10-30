@@ -1,370 +1,274 @@
 import React, { useState, useEffect } from 'react';
-// ไม่ต้อง import './Time.css'; แล้ว
 
-// --- CSS Styles ---
-// เราจะเก็บ CSS ทั้งหมดไว้ในตัวแปร string นี้
-const cssStyles = `
-/* Import Font (ถ้าต้องการ) */
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap');
+// --- [Mock Sidebar] ---
+// (Sidebar จำลอง, ให้ลบส่วนนี้ออก
+// และ uncomment import ด้านล่าง เมื่อนำไปใช้จริง)
 
-:root {
-    --primary-color: #4a69e2;
-    --bg-light-blue: #eef2ff;
-    --sidebar-bg: #ffffff;
-    --text-color: #333;
-    --text-secondary: #888;
-}
+// --- [จบ Mock Sidebar] ---
 
-body {
-    font-family: 'Sarabun', sans-serif;
-    background-color: var(--bg-light-blue);
-    margin: 0;
-}
-
-/* --- Layout หลัก --- */
-.container {
-    display: flex;
-    height: 100vh;
-}
-
-/* --- Sidebar --- */
-.sidebar {
-    width: 250px;
-    background-color: var(--sidebar-bg);
-    padding: 2rem 1.5rem;
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid #e0e0e0;
-}
-
-.sidebar-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 2.5rem;
-}
-
-.sidebar-header svg {
-    width: 24px;
-    height: 24px;
-    color: var(--primary-color);
-}
-
-.sidebar-header h1 {
-    font-size: 1.25rem;
-    color: var(--primary-color);
-    font-weight: 700;
-}
-
-.nav-menu {
-    list-style: none;
-    flex-grow: 1;
-    padding: 0;
-}
-
-.nav-item {
-    margin-bottom: 1rem;
-}
-
-.nav-link {
-    text-decoration: none;
-    color: var(--text-secondary);
-    font-size: 1rem;
-    padding: 0.75rem 1rem;
-    display: block;
-    border-radius: 8px;
-    transition: all 0.2s ease;
-}
-
-.nav-link:hover {
-    background-color: #f4f4f4;
-    color: var(--text-color);
-}
-
-.nav-link.active {
-    background-color: #e9edff;
-    color: var(--primary-color);
-    font-weight: 500;
-}
-
-.btn-add-new {
-    background-color: var(--primary-color);
-    color: white;
-    border: none;
-    padding: 0.75rem 1rem;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-family: 'Sarabun', sans-serif;
-    cursor: pointer;
-    text-align: center;
-    transition: background-color 0.2s ease;
-    margin-bottom: 1rem;
-}
-
-.btn-add-new:hover {
-    background-color: #3a52b4;
-}
-
-.sidebar-footer {
-    margin-top: auto;
-}
-
-.btn-logout {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    font-size: 1rem;
-    cursor: pointer;
-    padding: 0.75rem 1rem;
-    width: 100%;
-    text-align: left;
-    font-family: 'Sarabun', sans-serif;
-}
-
-/* --- Main Content --- */
-.main-content {
-    flex-grow: 1;
-    padding: 2rem 3rem;
-    display: flex;
-    flex-direction: column;
-}
-
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.header-title {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    font-weight: 400;
-    letter-spacing: 0.5px;
-}
-
-#current-time {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--text-color);
-}
-
-.timer-container {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2rem;
-}
-
-.timer-circle {
-    width: 400px;
-    height: 400px;
-    border-radius: 50%;
-    border: 15px solid var(--primary-color);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background-color: #ffffff30;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-}
-
-#countdown-display {
-    font-size: 3.5rem; /* ขนาดจะถูกปรับโดย inline style ด้านล่าง */
-    font-weight: 700;
-    color: var(--text-color);
-    text-align: center;
-    line-height: 1.2;
-}
-
-#next-event-subject {
-    font-size: 1.5rem;
-    color: var(--primary-color);
-    margin-top: 10px;
-}
-
-.btn-edit-time {
-    background-color: var(--primary-color);
-    color: white;
-    border: none;
-    padding: 0.8rem 2rem;
-    border-radius: 20px;
-    font-size: 1rem;
-    font-family: 'Sarabun', sans-serif;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-
-.btn-edit-time:hover {
-    background-color: #3a52b4;
-}
-`;
-// --- จบส่วน CSS ---
+import Sidebar from '../components/Sidebar'; // <-- (เมื่อนำไปใช้จริง ให้เปิดคอมเมนต์นี้)
 
 
 function Time() {
-  // State สำหรับเก็บเวลาปัจจุบัน (มุมบนขวา)
+  // State สำหรับเวลาปัจจุบัน (มุมบนขวา)
   const [currentTime, setCurrentTime] = useState(new Date());
-  
-  // State สำหรับเก็บเวลาที่นับถอยหลัง
-  const [countdown, setCountdown] = useState({
-    days: 0,
-    hours: 0,
-    minutes: 0,
-    seconds: 0,
-  });
-  
-  // State สำหรับเก็บชื่อวิชาถัดไป
-  const [nextEventSubject, setNextEventSubject] = useState('กำลังโหลด...');
-  
-  // State สำหรับเก็บเวลาของอีเวนต์ถัดไป
-  const [targetDate, setTargetDate] = useState(null);
 
-  // --- 1. เอฟเฟกต์สำหรับอัปเดตนาฬิกา (มุมบนขวา) ---
+  // --- State ใหม่สำหรับ Dropdown ---
+  const [plans, setPlans] = useState([]); // เก็บรายชื่อแผน
+  const [selectedPlanId, setSelectedPlanId] = useState(''); // เก็บ ID แผนที่เลือก
+  const [isLoadingPlans, setIsLoadingPlans] = useState(true); // สถานะโหลด Dropdown
+
+  // State สำหรับ Timer
+  const [todaySubject, setTodaySubject] = useState('เลือกแผน...');
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [initialSeconds, setInitialSeconds] = useState(0);
+  const [isActive, setIsActive] = useState(false);
+  const [isLoadingEvent, setIsLoadingEvent] = useState(false); // สถานะโหลด Event
+
+  // --- 1. Effect สำหรับนาฬิกา (มุมบนขวา) ---
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000); // อัปเดตทุกวินาที
-
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // --- 2. เอฟเฟกต์สำหรับดึงข้อมูลจาก Flask ---
+  // --- 2. Effect สำหรับดึง "รายชื่อแผน" (สำหรับ Dropdown) ---
   useEffect(() => {
-    const apiUrl = 'http://127.0.0.1:5000/api/study_plan';
+    setIsLoadingPlans(true);
+    fetch("http://127.0.0.1:5000/api/get_all_plans")
+      .then((res) => res.json())
+      .then((data) => {
+        setPlans(data || []); // ป้องกัน data เป็น null
+        if (data && data.length > 0) {
+          setSelectedPlanId(data[0]._id); // เลือกแผนแรกเป็น default
+        } else {
+          setTodaySubject("ไม่พบแผน");
+        }
+        setIsLoadingPlans(false);
+      })
+      .catch((error) => {
+        console.error("Error fetching plans:", error);
+        setTodaySubject("โหลดล้มเหลว");
+        setIsLoadingPlans(false);
+      });
+  }, []); // รันครั้งเดียว
 
-    fetch(apiUrl) 
+  // --- 3. Effect สำหรับดึง "Event ของวันนี้" (เมื่อเลือกแผน) ---
+  useEffect(() => {
+    if (!selectedPlanId) {
+      setTodaySubject("เลือกแผน...");
+      setSecondsLeft(0);
+      setInitialSeconds(0);
+      setIsActive(false);
+      return; // ถ้ายังไม่เลือกแผน ก็ไม่ต้องทำอะไร
+    }
+
+    setIsLoadingEvent(true);
+    setIsActive(false); // หยุด timer เมื่อเปลี่ยนแผน
+    
+    fetch(`http://127.0.0.1:5000/api/get_today_event/${selectedPlanId}`)
       .then(response => {
         if (!response.ok) throw new Error('Network response was not ok');
         return response.json();
       })
-      .then(data => {
-        const nextEvent = findNextEvent(data);
-        if (nextEvent) {
-          const eventDateTime = new Date(`${nextEvent.date}T${nextEvent.startTime}`);
-          setTargetDate(eventDateTime);
-          setNextEventSubject(nextEvent.subject);
+      .then(todayEvent => {
+        if (todayEvent && todayEvent.startTime && todayEvent.endTime) {
+          const durationSeconds = calculateDuration(todayEvent.startTime, todayEvent.endTime);
+          setSecondsLeft(durationSeconds);
+          setInitialSeconds(durationSeconds);
+          setTodaySubject(todayEvent.subject);
         } else {
-          setNextEventSubject('ไม่มีอีเวนต์');
+          setTodaySubject('ไม่มีแผนสำหรับวันนี้');
+          setSecondsLeft(0);
+          setInitialSeconds(0);
         }
+        setIsLoadingEvent(false);
       })
       .catch(error => {
-        console.error("Error fetching data:", error);
-        setNextEventSubject('เชื่อมต่อล้มเหลว');
+        console.error("Error fetching today event:", error);
+        setTodaySubject('เชื่อมต่อล้มเหลว');
+        setIsLoadingEvent(false);
       });
-  }, []); // ทำงานครั้งเดียว
+  }, [selectedPlanId]); // รันใหม่ทุกครั้งที่เปลี่ยน selectedPlanId
 
-  // --- 3. เอฟเฟกต์สำหรับเริ่มนับถอยหลัง ---
+  
+  // --- 4. [แก้ไข] Effect สำหรับการนับถอยหลัง ---
   useEffect(() => {
-    if (!targetDate) return;
+    let timer = null;
 
-    const timer = setInterval(() => {
-      const now = new Date();
-      const difference = targetDate - now;
-
-      if (difference <= 0) {
-        clearInterval(timer);
-        setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-        setNextEventSubject('เริ่มแล้ว!');
-      } else {
-        setCountdown({
-          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-          hours: Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
-          minutes: Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)),
-          seconds: Math.floor((difference % (1000 * 60)) / 1000)
+    if (isActive) {
+      // ถ้า isActive (กด Start)
+      timer = setInterval(() => {
+        
+        setSecondsLeft(prevSeconds => {
+          if (prevSeconds <= 1) {
+            // ถ้านับถึง 0
+            clearInterval(timer); // หยุด interval
+            setIsActive(false);    // ปิดสวิตช์
+            setTodaySubject('อ่านจบแล้ว!'); // เปลี่ยนข้อความ
+            return 0; // คืนค่า 0
+          }
+          // ถ้านยังไม่ถึง 0
+          return prevSeconds - 1; // ลดค่า 1
         });
-      }
-    }, 1000);
 
-    return () => clearInterval(timer);
-  }, [targetDate]);
+      }, 1000);
+
+    } 
+    
+    // Cleanup function: ทำงานเมื่อ component unmount หรือ dependency (isActive) เปลี่ยน
+    return () => {
+      if (timer) {
+        clearInterval(timer); // ล้าง interval เก่าทิ้ง
+      }
+    };
+  }, [isActive]); // <-- [แก้ไข] ให้ขึ้นอยู่กับ 'isActive' เท่านั้น
+  
 
   // --- Helper Functions ---
-
-  const findNextEvent = (plan) => {
-    const now = new Date();
-    // ตอนนี้คือ 30 ต.ค. 2025
-    // อีเวนต์แรกคือ 29 พ.ย. 2025 (คณิต)
-    // อีเวนต์สองคือ 30 พ.ย. 2025 (วิทย์)
-    
-    let nextEvent = null;
-    let minDate = Infinity;
-
-    plan.forEach(item => {
-      const eventDate = new Date(`${item.date}T${item.startTime}`); // e.g., 2025-11-29T09:00
-      if (eventDate > now && eventDate < minDate) {
-        minDate = eventDate;
-        nextEvent = item;
-      }
-    });
-    return nextEvent; // ควรจะคืนค่า { ... subject: "คณิต" }
+  const calculateDuration = (start, end) => {
+    try {
+      const [startH, startM] = start.split(':').map(Number);
+      const [endH, endM] = end.split(':').map(Number);
+      const startTimeInSeconds = (startH * 3600) + (startM * 60);
+      const endTimeInSeconds = (endH * 3600) + (endM * 60);
+      return endTimeInSeconds - startTimeInSeconds;
+    } catch {
+      return 0;
+    }
   };
 
   const formatCurrentTime = (date) => {
-    // แสดงผลเป็น "30 October 4:45 PM" (ตามเวลาปัจจุบัน)
     const options = { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: true };
-    return date.toLocaleString('en-US', options).replace(',', '');
+    // ใช้ 'th-TH' เพื่อแสดงผลภาษาไทย
+    return date.toLocaleString('th-TH', options).replace(',', ''); 
   };
 
   const formatCountdown = () => {
-    // เวลาเป้าหมายคือ 29 พ.ย. 2025, 09:00
-    // เวลาปัจจุบันคือ 30 ต.ค. 2025, 16:45
-    // จะเหลือประมาณ 29 วัน 16 ชั่วโมง ...
-    if (countdown.days > 0) {
-      return `${countdown.days} วัน ${String(countdown.hours).padStart(2, '0')}:${String(countdown.minutes).padStart(2, '0')}`;
-    }
-    return `${String(countdown.hours).padStart(2, '0')}:${String(countdown.minutes).padStart(2, '0')}:${String(countdown.seconds).padStart(2, '0')}`;
+    const hours = Math.floor(secondsLeft / 3600);
+    const minutes = Math.floor((secondsLeft % 3600) / 60);
+    const seconds = secondsLeft % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
+  // --- Button Handlers ---
+  const toggleTimer = () => {
+    if (secondsLeft > 0) { // ป้องกันการกด Start/Pause เมื่อเวลาเป็น 0
+      setIsActive(!isActive);
+    }
+  };
+
+  const resetTimer = () => {
+    setIsActive(false);
+    setSecondsLeft(initialSeconds);
+    // ต้องดึง Subject กลับมาด้วย (ถ้า initialSeconds > 0)
+    if (initialSeconds > 0) {
+        // อาจจะต้องเก็บ initialSubject ไว้ใน state ด้วย
+        // หรือง่ายกว่าคือ ปล่อยให้ useEffect[selectedPlanId] ทำงานใหม่
+        // แต่การตั้งค่า subject ใหม่ทันทีจะดีกว่า
+        // (เราต้องดึงข้อมูลอีกรอบ หรือเก็บ state ไว้)
+        // [แบบง่าย]
+        setTodaySubject(isLoadingEvent ? 'กำลังโหลด...' : (initialSeconds > 0 ? todaySubject : 'ไม่มีแผนสำหรับวันนี้'));
+    }
+  };
+
+  // --- Render ---
   return (
-    <>
-      {/* แทรก CSS ที่เราสร้างไว้ข้างบนเข้าไปในหน้าเว็บ */}
-      <style>{cssStyles}</style>
-      
-      <div className="container">
-        {/* --- Sidebar --- */}
-        <nav className="sidebar">
-          <div className="sidebar-header">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5v-.008ZM9.75 18h.008v.008H9.75v-.008ZM7.5 18h.008v.008H7.5v-.008ZM14.25 15h.008v.008H14.25v-.008ZM14.25 18h.008v.008H14.25v-.008ZM16.5 15h.008v.008H16.5v-.008ZM16.5 18h.008v.008H16.5v-.008Z" />
-            </svg>
-            <h1>Exam Planner</h1>
-          </div>
-          <ul className="nav-menu">
-            <li className="nav-item"><a href="#" className="nav-link">Dashboard</a></li>
-            <li className="nav-item"><a href="#" className="nav-link">Calendar</a></li>
-            <li className="nav-item"><a href="#" className="nav-link">Subject</a></li>
-            <li className="nav-item"><a href="#" className="nav-link active">Time</a></li>
-          </ul>
-          <button className="btn-add-new">Add New +</button>
-          <div className="sidebar-footer">
-            <button className="btn-logout">Log Out</button>
-          </div>
-        </nav>
+    <div className="flex h-screen bg-gray-50">
+      <Sidebar />
 
-        {/* --- Main Content --- */}
-        <main className="main-content">
-          <header className="header">
-            <span className="header-title">timer</span>
-            <span id="current-time">{formatCurrentTime(currentTime)}</span>
-          </header>
+      {/* --- Main Content --- */}
+      <main className="flex-1 flex flex-col p-8 overflow-y-auto">
+        
+        {/* Header */}
+        <header className="flex justify-between items-center mb-8">
+          <span className="text-sm font-medium text-gray-500 uppercase">TIMER</span>
+          <span className="text-base font-medium text-gray-800">
+            {formatCurrentTime(currentTime)}
+          </span>
+        </header>
 
-          <div className="timer-container">
-            <div className="timer-circle">
-              <div id="countdown-display" style={{ fontSize: countdown.days > 0 ? '2.5rem' : '3.5rem' }}>
-                {formatCountdown()}
-              </div>
-              <div id="next-event-subject">
-                {nextEventSubject}
-              </div>
+        {/* Dropdown เลือกแผน */}
+        <div className="mb-6 w-full max-w-xs">
+           <label htmlFor="plan-select" className="block text-sm font-medium text-gray-700 mb-1">
+             เลือกแผน:
+           </label>
+           <select
+             id="plan-select"
+             className="w-full p-2 border border-gray-300 rounded-lg shadow-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+             value={selectedPlanId}
+             onChange={(e) => setSelectedPlanId(e.target.value)}
+             disabled={isLoadingPlans}
+           >
+             {isLoadingPlans ? (
+                <option value="">กำลังโหลด...</option>
+             ) : (
+               plans.length > 0 ? (
+                 plans.map((plan) => (
+                   <option key={plan._id} value={plan._id}>
+                     {plan.exam_title}
+                   </option>
+                 ))
+               ) : (
+                 <option value="">ไม่พบแผน</option>
+               )
+             )}
+           </select>
+         </div>
+
+
+        {/* Timer Container */}
+        <div className="flex-1 flex flex-col items-center justify-center space-y-8">
+          
+          {/* Timer Circle */}
+          <div className="relative w-80 h-80 md:w-96 md:h-96">
+            <div className="absolute inset-0 bg-white rounded-full shadow-xl"></div>
+            <div className="absolute inset-2 bg-white rounded-full border-8 border-gray-100"></div>
+            <div className="absolute inset-0 rounded-full border-[12px] border-blue-500 shadow-inner"></div>
+            
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+              {isLoadingEvent ? (
+                <span className="text-2xl font-bold text-gray-500">Loading...</span>
+              ) : (
+                <>
+                  <div className="text-6xl md:text-7xl font-bold text-gray-800 tracking-wider">
+                    {formatCountdown()}
+                  </div>
+                  <div className="text-2xl font-medium text-blue-600 mt-2">
+                    {todaySubject}
+                  </div>
+                </>
+              )}
             </div>
-            <button className="btn-edit-time">แก้ไขเวลา</button>
           </div>
-        </main>
-      </div>
-    </>
+          
+          {/* Timer Controls */}
+          <div className="flex space-x-4">
+            <button 
+              className={`w-32 py-3 rounded-full text-white font-semibold shadow-lg transition-all
+                          ${isActive ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-600 hover:bg-blue-700'}
+                          ${(secondsLeft <= 0 || isLoadingEvent) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={toggleTimer}
+              disabled={secondsLeft <= 0 || isLoadingEvent}
+            >
+              {isActive ? 'Pause' : 'Start'}
+            </button>
+            <button 
+              className={`w-32 py-3 rounded-full font-semibold shadow-lg transition-all
+                          bg-gray-100 text-gray-700 hover:bg-gray-200
+                          ${(secondsLeft <= 0 || isLoadingEvent || isActive) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={resetTimer}
+              disabled={secondsLeft <= 0 || isLoadingEvent || isActive}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }
 
 export default Time;
+

@@ -8,17 +8,24 @@ export default function ExamPlannerAddNew() {
     const [examSubjects, setExamSubjects] = useState([]); 
     const [examDate, setExamDate] = useState('');
 
+    // State for fetching subjects
     const [subjects, setSubjects] = useState([]);
     const [isLoadingSubjects, setIsLoadingSubjects] = useState(true);
     const [subjectError, setSubjectError] = useState('');
 
+    // State for preparation period
     const [prepStartDate, setPrepStartDate] = useState('');
     const [prepEndDate, setPrepEndDate] = useState('');
     const [defaultStartTime, setDefaultStartTime] = useState('09:00');
     const [defaultEndTime, setDefaultEndTime] = useState('17:00');
     
+    // State for the generated daily schedule
     const [dailySchedule, setDailySchedule] = useState([]);
 
+    // State for notification preference
+    const [sendNotifications, setSendNotifications] = useState(true); // <-- เพิ่ม State นี้
+
+    // Effect to fetch user's subjects on component mount
     useEffect(() => {
         const fetchSubjects = async () => {
             console.log("🔄 Starting to fetch subjects...");
@@ -38,8 +45,6 @@ export default function ExamPlannerAddNew() {
                 });
                 
                 console.log("✅ Response status:", response.status);
-                console.log("📦 Response data:", response.data);
-                
                 const fetchedSubjects = response.data;
 
                 if (!Array.isArray(fetchedSubjects)) {
@@ -51,7 +56,7 @@ export default function ExamPlannerAddNew() {
 
                 if (fetchedSubjects.length === 0) {
                     console.warn("⚠️ No subjects found in database");
-                    setSubjectError("ไม่พบรายวิชาในระบบ");
+                    setSubjectError("ไม่พบรายวิชาในระบบ (กรุณาไปที่หน้า 'วิชาของฉัน' เพื่อเพิ่มวิชา)");
                     setSubjects([]);
                 } else {
                     console.log(`✅ Found ${fetchedSubjects.length} subjects`);
@@ -62,16 +67,12 @@ export default function ExamPlannerAddNew() {
                 console.error("❌ Failed to fetch subjects:", error);
                 
                 if (error.response) {
-                    console.error("Response error:", error.response.status, error.response.data);
                     setSubjectError(`เซิร์ฟเวอร์ตอบกลับ: ${error.response.data.message || error.response.status}`);
                 } else if (error.request) {
-                    console.error("No response received:", error.request);
                     setSubjectError("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้");
                 } else {
-                    console.error("Error:", error.message);
                     setSubjectError(`เกิดข้อผิดพลาด: ${error.message}`);
                 }
-                
                 setSubjects([]);
             } finally {
                 setIsLoadingSubjects(false);
@@ -82,6 +83,7 @@ export default function ExamPlannerAddNew() {
         fetchSubjects();
     }, []);
 
+    // Effect to auto-generate daily schedule when dates change
     useEffect(() => {
         if (prepStartDate && prepEndDate && new Date(prepStartDate) <= new Date(prepEndDate)) {
             const start = new Date(prepStartDate);
@@ -90,7 +92,7 @@ export default function ExamPlannerAddNew() {
             
             for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
                 days.push({
-                    date: new Date(dt).toISOString().split('T')[0],
+                    date: new Date(dt).toISOString().split('T')[0], // Format: "YYYY-MM-DD"
                     isAvailable: true,
                     startTime: defaultStartTime,
                     endTime: defaultEndTime,
@@ -102,9 +104,10 @@ export default function ExamPlannerAddNew() {
         }
     }, [prepStartDate, prepEndDate, defaultStartTime, defaultEndTime]);
 
+    // Memoized calculation for formatting display dates
     const formattedDays = useMemo(() => {
         return dailySchedule.map(day => {
-            const dateObj = new Date(day.date + 'T00:00:00');
+            const dateObj = new Date(day.date + 'T00:00:00'); // Ensure correct local date parsing
             return {
                 ...day,
                 displayDate: dateObj.toLocaleDateString('th-TH', {
@@ -114,12 +117,14 @@ export default function ExamPlannerAddNew() {
         });
     }, [dailySchedule]);
 
+    // Handler to update a specific day in the schedule
     const handleDayChange = (index, field, value) => {
         const updatedSchedule = [...dailySchedule];
         updatedSchedule[index] = { ...updatedSchedule[index], [field]: value };
         setDailySchedule(updatedSchedule);
     };
     
+    // Handler to add/remove subjects from the exam plan
     const handleSubjectChange = (e) => {
         const { value, checked } = e.target;
     
@@ -130,19 +135,16 @@ export default function ExamPlannerAddNew() {
                     ...prev,
                     {
                         name: selectedSubject.title,
-                        priority: selectedSubject.priority ?? 1, 
+                        priority: selectedSubject.priority ?? 1, // Default to 1 if priority is null/undefined
                     },
                 ]);
-                console.log("✅ Added subject:", {
-                    name: selectedSubject.title,
-                    priority: selectedSubject.priority ?? 1,
-                });
             }
         } else {
             setExamSubjects(prev => prev.filter(subject => subject.name !== value));
         }
     };
 
+    // Handler to reset the form
     const handleCancel = () => {
         setExamTitle('');
         setExamSubjects([]);
@@ -152,8 +154,10 @@ export default function ExamPlannerAddNew() {
         setDefaultStartTime('09:00');
         setDefaultEndTime('17:00');
         setDailySchedule([]);
+        setSendNotifications(true); // <-- รีเซ็ต Checkbox
     };
 
+    // Handler to submit the form
     const handleSubmit = async (e) => {
         e.preventDefault();
         
@@ -174,36 +178,31 @@ export default function ExamPlannerAddNew() {
             return;
         }
 
+        // Filter out only the available days
         const studyPlan = dailySchedule
             .filter(day => day.isAvailable)
             .map(({ date, startTime, endTime }) => ({ date, startTime, endTime }));
 
         if (studyPlan.length === 0) {
-            alert("คุณยังไม่ได้กำหนดวันสำหรับอ่านหนังสือเลย");
+            alert("คุณยังไม่ได้กำหนดวันสำหรับอ่านหนังสือเลย (ทุกวันถูกติ๊ก 'ไม่ว่าง')");
             return;
         }
 
-        const isValid = examSubjects.every(s => 
-            'name' in s && 
-            'priority' in s &&
-            typeof s.priority === 'number'
-        );
-        
-        if (!isValid) {
-            console.error("❌ Invalid subject structure:", examSubjects);
-            alert("ข้อมูลวิชาไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
-            return;
-        }
-
+        // --- Payload Creation ---
         const payload = {
             examTitle,
             examSubjects: examSubjects,
             examDate,
             studyPlan,
+            sendNotifications: sendNotifications, // <-- ส่งค่า Checkbox ไป
+            
+            // (!!) หมายเหตุ: Backend (api/planner.py) ที่ผมเขียนให้ก่อนหน้า
+            // จะรับ userId แบบ hardcode ไว้ก่อน
+            // ในอนาคต คุณต้องส่ง userId ที่ login อยู่ มาใน payload นี้ด้วย
+            // e.g., userId: auth.user.id 
         };
 
         console.log("📤 Payload:", payload);
-        console.log("📋 Subjects with priority:", examSubjects);
 
         try {
             const res = await axios.post(
@@ -219,11 +218,11 @@ export default function ExamPlannerAddNew() {
             
             console.log("✅ Success:", res.data);
             alert(res.data.message || "บันทึกแผนการเตรียมสอบสำเร็จ!");
-            handleCancel();
+            handleCancel(); // Reset form after success
         } catch (err) {
             console.error("❌ Submission error:", err);
             console.error("Response:", err.response?.data);
-            alert(err.response?.data?.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+            alert(err.response?.data?.message || err.response?.data?.error || "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
         }
     };
 
@@ -237,7 +236,7 @@ export default function ExamPlannerAddNew() {
 
                     <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-6 sm:p-10 space-y-8">
                         
-                        {/* Exam Information Section */}
+                        {/* 1. Exam Information Section */}
                         <div className="border border-gray-200 rounded-xl p-6">
                             <h2 className="text-xl font-semibold mb-5 text-gray-700">1. ข้อมูลการสอบ</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -252,7 +251,7 @@ export default function ExamPlannerAddNew() {
                                     />
                                 </div>
                                 
-                                {/* UI ส่วนเลือกวิชา */}
+                                {/* Subject Selection UI */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">วิชาที่สอบ (เลือกได้หลายวิชา)</label>
                                     {isLoadingSubjects ? (
@@ -266,7 +265,7 @@ export default function ExamPlannerAddNew() {
                                                 ⚠️ {subjectError}
                                             </div>
                                             <a
-                                                href="/Subject" 
+                                                href="/Subject" // (ลิงก์ไปหน้าเพิ่มวิชา)
                                                 className="w-full px-4 py-3 rounded-lg border-2 border-dashed border-blue-500 text-blue-600 font-semibold hover:bg-blue-50 transition flex items-center justify-center gap-2"
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -297,7 +296,7 @@ export default function ExamPlannerAddNew() {
                                         </div>
                                     ) : (
                                         <a
-                                            href="/Subject" 
+                                            href="/Subject" // (ลิงก์ไปหน้าเพิ่มวิชา)
                                             className="w-full px-4 py-3 rounded-lg border-2 border-dashed border-blue-500 text-blue-600 font-semibold hover:bg-blue-50 transition flex items-center justify-center gap-2"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -320,7 +319,7 @@ export default function ExamPlannerAddNew() {
                             </div>
                         </div>
 
-                        {/* Preparation Period Section */}
+                        {/* 2. Preparation Period Section */}
                         <div className="border border-gray-200 rounded-xl p-6">
                             <h2 className="text-xl font-semibold mb-5 text-gray-700">2. กำหนดช่วงเวลาเตรียมตัว</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -363,7 +362,7 @@ export default function ExamPlannerAddNew() {
                             </div>
                         </div>
 
-                        {/* Daily Study Schedule Section */}
+                        {/* 3. Daily Study Schedule Section */}
                         {formattedDays.length > 0 && (
                             <div className="border border-gray-200 rounded-xl p-6">
                                 <h2 className="text-xl font-semibold mb-4 text-gray-700">3. จัดการเวลาอ่านหนังสือรายวัน</h2>
@@ -415,7 +414,30 @@ export default function ExamPlannerAddNew() {
                             </div>
                         )}
 
-                        {/* Action Buttons */}
+                        {/* --- (!! ส่วนที่เพิ่มเข้ามา !!) --- */}
+                        {/* 4. Notification Toggle Section */}
+                        <div className="flex items-center justify-start p-4 bg-gray-50 rounded-xl border border-gray-200">
+                            <div className="flex items-center h-5">
+                                <input
+                                    id="sendNotifications"
+                                    name="sendNotifications"
+                                    type="checkbox"
+                                    checked={sendNotifications}
+                                    onChange={(e) => setSendNotifications(e.target.checked)}
+                                    className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                                />
+                            </div>
+                            <div className="ml-4 text-sm">
+                                <label htmlFor="sendNotifications" className="font-medium text-gray-800 cursor-pointer">
+                                    อนุญาตให้ส่งอีเมลแจ้งเตือน
+                                </label>
+                                <p className="text-gray-500 text-xs mt-1">
+                                    ระบบจะส่งอีเมลแจ้งเตือนคุณเมื่อถึงเวลาอ่านหนังสือตามตารางที่กำหนด
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* 5. Action Buttons */}
                         <div className="flex gap-4 pt-6 justify-end border-t border-gray-200">
                             <button 
                                 type="button" 

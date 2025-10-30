@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
@@ -11,9 +10,16 @@ import {
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleIconSolid } from '@heroicons/react/24/solid';
 
-// --- (Helper Functions) ---
+// ✅ 1. เพิ่ม Import สำหรับ Chart.js
+import { Doughnut } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 
-// Helper for formatting exam date and time
+// ✅ 2. ลงทะเบียนองค์ประกอบที่จำเป็นสำหรับ Chart.js
+ChartJS.register(ArcElement, Tooltip, Legend);
+
+
+// --- (Helper Functions - ไม่ได้แก้ไข) ---
+
 const formatExamDateTime = (dateString) => {
     if (!dateString) return { date: "ไม่ระบุวันที่", time: "ไม่ระบุเวลา" };
     
@@ -27,17 +33,16 @@ const formatExamDateTime = (dateString) => {
     const timeOptions = {
         hour: '2-digit',
         minute: '2-digit',
-        hour12: true, // ใช้ AM/PM
+        hour12: true, 
         timeZone: 'Asia/Bangkok'
     };
     
     return {
         date: date.toLocaleDateString('th-TH', dateOptions),
-        time: date.toLocaleTimeString('th-TH', timeOptions).replace(' ', '') // '09:00 AM'
+        time: date.toLocaleTimeString('th-TH', timeOptions).replace(' ', '')
     };
 };
 
-// Helper for formatting chapter date
 const formatChapterDate = (dateString) => {
     if (!dateString) return "ไม่ระบุวันที่";
     const date = new Date(dateString);
@@ -50,7 +55,6 @@ const formatChapterDate = (dateString) => {
     return date.toLocaleDateString('th-TH', options);
 };
 
-// Helper to check if two dates are the same day (ignores time)
 const isSameDay = (d1, d2) => {
     if (!d1 || !d2) return false;
     return d1.getFullYear() === d2.getFullYear() &&
@@ -59,10 +63,10 @@ const isSameDay = (d1, d2) => {
 };
 
 
-// --- (Calendar Component) ---
+// --- (Calendar Component - ✅ แก้ไขส่วนนี้) ---
 const CalendarView = ({ chapterDetails, examDate, completedChapters, totalChapters }) => {
     
-    // --- State สำหรับปฏิทิน ---
+    // --- (โค้ด Logic เดิมของ CalendarView) ---
     const getInitialDate = () => {
         if (chapterDetails && chapterDetails.length > 0 && chapterDetails[0].date) {
             return new Date(chapterDetails[0].date);
@@ -72,7 +76,6 @@ const CalendarView = ({ chapterDetails, examDate, completedChapters, totalChapte
     };
     const [displayDate, setDisplayDate] = useState(getInitialDate());
 
-    // --- Helpers สำหรับปฏิทิน ---
     const handlePrevMonth = () => {
         setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() - 1, 1));
     };
@@ -84,19 +87,15 @@ const CalendarView = ({ chapterDetails, examDate, completedChapters, totalChapte
     const year = displayDate.toLocaleDateString('th-TH', { year: 'numeric', timeZone: 'Asia/Bangkok' });
     const weekdays = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 
-    // --- สร้าง Array ของวันในปฏิทิน ---
     const getCalendarDays = () => {
         const yearNum = displayDate.getFullYear();
         const monthNum = displayDate.getMonth(); 
-
         const firstDayOfMonth = new Date(yearNum, monthNum, 1);
         const daysInMonth = new Date(yearNum, monthNum + 1, 0).getDate();
-        
         const startDayOfWeek = (firstDayOfMonth.getDay() + 6) % 7;
-
         const daysArray = [];
         for (let i = 0; i < startDayOfWeek; i++) {
-            daysArray.push(null); // Placeholder for empty cells
+            daysArray.push(null);
         }
         for (let i = 1; i <= daysInMonth; i++) {
             daysArray.push(new Date(yearNum, monthNum, i));
@@ -107,61 +106,105 @@ const CalendarView = ({ chapterDetails, examDate, completedChapters, totalChapte
     const days = getCalendarDays();
     const examDateObj = examDate ? new Date(examDate) : null;
 
-    // --- ตรรกะการแสดงสีของวัน ---
     const getDayStatus = (date) => {
         if (!date) return 'bg-transparent'; 
-
-        // ตรวจสอบวันสอบก่อน (มีลำดับความสำคัญสูงสุด)
         if (examDateObj && isSameDay(date, examDateObj)) {
-            return 'bg-yellow-300 text-yellow-900 font-semibold'; // วันสอบ
+            return 'bg-yellow-300 text-yellow-900 font-semibold';
         }
-
-        // ตรวจสอบว่ามีบทที่ต้องอ่านในวันนี้หรือไม่
         const chaptersOnThisDay = chapterDetails.filter(ch => {
             return ch.date && isSameDay(new Date(ch.date), date);
         });
-
         if (chaptersOnThisDay.length > 0) {
-            const allCompleted = chaptersOnThisDay.every(ch => ch.is_completed === true);
-            
+            const allCompleted = chaptersOnThisDay.every(ch => ch.status === 'completed');
             if (allCompleted) {
-                return 'bg-green-300 text-green-900 font-medium'; // อ่านแล้ว (ทุกบท)
+                return 'bg-green-300 text-green-900 font-medium';
             } else {
-                return 'bg-pink-300 text-pink-900 font-medium'; // ยังไม่อ่าน
+                return 'bg-pink-300 text-pink-900 font-medium';
             }
         }
-        
-        return 'bg-gray-100 text-gray-600'; // วันปกติ (ไม่มีกิจกรรม)
+        return 'bg-gray-100 text-gray-600';
+    };
+    // --- (สิ้นสุดโค้ด Logic เดิม) ---
+
+
+    // --- ✅ 3. ย้าย Logic กราฟมาไว้ตรงนี้ ---
+    const completedPercent = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
+    const pendingChapters = totalChapters - completedChapters; // คำนวณที่ยังไม่อ่าน
+
+    // 3a. ข้อมูลสำหรับกราฟ
+    const chartData = {
+        labels: ['อ่านแล้ว', 'ยังไม่อ่าน'],
+        datasets: [
+            {
+                label: 'จำนวนช่อง',
+                data: [completedChapters, pendingChapters], // ใช้ props ที่ส่งเข้ามา
+                backgroundColor: [
+                    '#4ade80', // สีเขียว
+                    '#f87171', // สีแดง
+                ],
+                borderColor: [
+                    '#ffffff',
+                    '#ffffff',
+                ],
+                borderWidth: 2,
+            },
+        ],
     };
 
-    const completedPercent = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
-    const pendingPercent = 100 - completedPercent;
+    // 3b. ตัวเลือกสำหรับกราฟ
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '70%',
+        plugins: {
+            legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                    // (แนะนำให้ใส่ font-family ที่รองรับภาษาไทยใน CSS ของคุณ)
+                    font: {
+                        family: 'Sarabun, sans-serif', 
+                        size: 14,
+                    },
+                    padding: 20,
+                },
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        let label = context.label || '';
+                        if (label) {
+                            label += ': ';
+                        }
+                        if (context.parsed !== null) {
+                            label += context.parsed + ' ช่อง'; 
+                        }
+                        return label;
+                    }
+                }
+            }
+        }
+    };
+    // --- (สิ้นสุด Logic กราฟ) ---
+
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             
-            {/* Calendar Card */}
+            {/* Calendar Card (md:col-span-2) */}
             <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-lg">
                 <h3 className="text-xl font-semibold text-gray-800 mb-4">ตารางการอ่าน</h3>
                 
-                {/* Calendar Header */}
+                {/* (ส่วนปฏิทิน ไม่ได้แก้ไข) */}
                 <div className="flex justify-between items-center mb-4">
-                    <button 
-                        onClick={handlePrevMonth}
-                        className="p-2 rounded-full hover:bg-gray-100"
-                    >
+                    <button onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-gray-100">
                         <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
                     </button>
                     <span className="font-semibold">{monthName} {year}</span>
-                    <button 
-                        onClick={handleNextMonth}
-                        className="p-2 rounded-full hover:bg-gray-100"
-                    >
+                    <button onClick={handleNextMonth} className="p-2 rounded-full hover:bg-gray-100">
                         <ArrowLeftIcon className="h-5 w-5 text-gray-600 transform rotate-180" />
                     </button>
                 </div>
-
-                {/* Calendar Grid */}
                 <div className="grid grid-cols-7 gap-1 text-center">
                     {weekdays.map(wd => (
                         <div key={wd} className="text-xs font-medium text-gray-500 mb-2">{wd}</div>
@@ -178,7 +221,6 @@ const CalendarView = ({ chapterDetails, examDate, completedChapters, totalChapte
                         </div>
                     ))}
                 </div>
-                 {/* Legend */}
                  <div className="flex justify-start gap-4 mt-6 flex-wrap">
                     <div className="flex items-center">
                         <span className="h-4 w-4 bg-green-300 rounded mr-2"></span>
@@ -195,56 +237,74 @@ const CalendarView = ({ chapterDetails, examDate, completedChapters, totalChapte
                 </div>
             </div>
 
-            {/* Progress Cards */}
+            {/* // -----------------------------------------------------------------
+            // ✅ 4. (แก้ไข) เปลี่ยนจาก Progress Cards เป็น Progress Chart
+            // -----------------------------------------------------------------
+            */}
             <div className="md:col-span-1 space-y-6">
-                {/* Level Up */}
-                <div className="bg-blue-100 p-6 rounded-2xl shadow-lg flex justify-between items-center">
-                    <div>
-                        <h4 className="font-semibold text-blue-800">Level Up</h4>
-                        <p className="text-sm text-blue-700">ความคืบหน้า</p>
+                
+                {/* (การ์ดใหม่สำหรับแสดงกราฟ) */}
+                <div className="bg-white p-6 rounded-2xl shadow-lg">
+                    <h4 className="text-xl font-semibold text-gray-800 mb-4 text-center">
+                        ภาพรวมความคืบหน้า
+                    </h4>
+                    
+                    {/* (เรียกใช้ Component <Doughnut> โดยตรง) */}
+                    <div style={{ position: 'relative', height: '250px' }}>
+                        <Doughnut data={chartData} options={chartOptions} />
                     </div>
-                    <div className="text-3xl font-bold text-blue-800">
-                        {completedPercent}%
-                    </div>
-                </div>
-                {/* Pending */}
-                <div className="bg-red-100 p-6 rounded-2xl shadow-lg flex justify-between items-center">
-                    <div>
-                        <h4 className="font-semibold text-red-800">บทที่ยังไม่ได้อ่าน</h4>
-                        <p className="text-sm text-red-700">ที่เหลือ</p>
-                    </div>
-                    <div className="text-3xl font-bold text-red-800">
-                        {pendingPercent}%
+                    
+                    {/* (แสดง % ตรงกลาง) */}
+                    <div className="text-center mt-6">
+                         <p className="text-3xl font-bold text-blue-800">{completedPercent}%</p>
+                         <p className="text-sm text-blue-700">สำเร็จ</p>
                     </div>
                 </div>
+
+                {/* (เราลบการ์ด "Level Up" และ "Pending" เดิมทิ้งไป) */}
             </div>
+            {/* ----------------------------------------------------------------- */}
+
         </div>
     );
 };
 
-// --- (Checklist Component) ---
-const ChecklistView = ({ chapters, onStatusChange, onSave, isSaving }) => {
+
+// --- (Checklist Component - ไม่ได้แก้ไข) ---
+// (นี่คือเวอร์ชันที่จัดกลุ่มตามวันที่ และลบชื่อวิชาออกแล้ว)
+const ChecklistView = ({ groupedChapters, sortedDates, onStatusChange, onSave, isSaving }) => {
     return (
         <div className="bg-white p-6 rounded-2xl shadow-lg">
             <h3 className="text-xl font-semibold text-gray-800 mb-6">รายละเอียดข้อมูล</h3>
             
-            <div className="space-y-6">
-                {chapters.length > 0 ? chapters.map((chapter) => (
-                    <div key={chapter._id} className="pb-4 border-b border-gray-100 last:border-b-0">
-                        <h4 className="text-lg font-semibold text-gray-700">{chapter.chapter_name}</h4>
-                        <p className="text-sm text-gray-500 mb-3">
-                            {formatChapterDate(chapter.date)} เวลา {chapter.startTime} - {chapter.endTime}
-                        </p>
+            <div className="space-y-8">
+                {sortedDates.length > 0 ? sortedDates.map((dateKey) => (
+                    <div key={dateKey}>
                         
-                        <label className="flex items-center cursor-pointer">
-                            <input 
-                                type="checkbox"
-                                className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                checked={chapter.is_completed}
-                                onChange={(e) => onStatusChange(chapter._id, e.target.checked)}
-                            />
-                            <span className="ml-3 text-gray-700">อ่านแล้ว</span>
-                        </label>
+                        <h4 className="text-lg font-bold text-gray-900 mb-4 border-b border-gray-200 pb-2">
+                            {formatChapterDate(dateKey)}
+                        </h4>
+                        
+                        <div className="space-y-6">
+                            {groupedChapters[dateKey].map((chapter) => (
+                                <div key={chapter.slot_id} className="pl-2">
+                                    
+                                    <p className="text-sm text-gray-500 mb-3">
+                                        เวลา {chapter.startTime} - {chapter.endTime}
+                                    </p>
+                                    
+                                    <label className="flex items-center cursor-pointer">
+                                        <input 
+                                            type="checkbox"
+                                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                            checked={chapter.status === 'completed'}
+                                            onChange={(e) => onStatusChange(chapter.slot_id, e.target.checked)}
+                                        />
+                                        <span className="ml-3 text-gray-700">อ่านแล้ว</span>
+                                    </label>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )) : (
                     <p className="text-gray-500">ไม่พบรายละเอียดบทเรียน</p>
@@ -265,16 +325,15 @@ const ChecklistView = ({ chapters, onStatusChange, onSave, isSaving }) => {
 };
 
 
-// --- (Main Detail Component) ---
+// --- (Main Detail Component - ไม่ได้แก้ไข) ---
 
 export default function ExamPlanDetail() {
     const { id } = useParams();
     const [plan, setPlan] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeTab, setActiveTab] = useState('calendar'); // 'calendar' or 'checklist'
+    const [activeTab, setActiveTab] = useState('calendar');
     
-    // State สำหรับ Checkbox
     const [chapterDetails, setChapterDetails] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -288,8 +347,9 @@ export default function ExamPlanDetail() {
                     { withCredentials: true }
                 );
                 setPlan(response.data);
-                if (response.data.study_plan_detail) {
-                    setChapterDetails(response.data.study_plan_detail);
+                
+                if (response.data.study_plan) {
+                    setChapterDetails(response.data.study_plan);
                 }
             } catch (err) {
                 console.error("❌ Failed to fetch exam plan detail:", err);
@@ -302,22 +362,22 @@ export default function ExamPlanDetail() {
         fetchPlanDetail();
     }, [id]);
 
-    // Handler เมื่อติ๊ก Checkbox
-    const handleStatusChange = (chapterId, isCompleted) => {
+    const handleStatusChange = (slotId, isChecked) => {
         setChapterDetails(prevDetails => 
             prevDetails.map(ch => 
-                ch._id === chapterId ? { ...ch, is_completed: isCompleted } : ch
+                ch.slot_id === slotId 
+                    ? { ...ch, status: isChecked ? 'completed' : 'pending' } 
+                    : ch
             )
         );
     };
 
-    // Handler เมื่อกด "บันทึก"
     const handleSaveProgress = async () => {
         setIsSaving(true);
         try {
             await axios.put(
                 `http://localhost:5000/calender/api/exam-plan/${id}/progress`,
-                { chapters: chapterDetails },
+                { chapters: chapterDetails }, 
                 { withCredentials: true }
             );
         } catch (err) {
@@ -327,9 +387,8 @@ export default function ExamPlanDetail() {
         }
     };
 
-    // คำนวณ % ความคืบหน้า
     const totalChapters = chapterDetails.length;
-    const completedChapters = chapterDetails.filter(ch => ch.is_completed).length;
+    const completedChapters = chapterDetails.filter(ch => ch.status === 'completed').length;
 
     // --- (Render) ---
 
@@ -368,17 +427,30 @@ export default function ExamPlanDetail() {
 
     const { date: examDate, time: examTime } = formatExamDateTime(plan.exam_date);
 
+    // (Logic จัดกลุ่ม ไม่ได้แก้ไข)
+    const groupedChapters = chapterDetails.reduce((acc, chapter) => {
+        const dateKey = chapter.date.split('T')[0]; 
+        
+        if (!acc[dateKey]) {
+            acc[dateKey] = [];
+        }
+        acc[dateKey].push(chapter);
+        return acc;
+    }, {}); 
+
+    const sortedDates = Object.keys(groupedChapters).sort((a, b) => new Date(a) - new Date(b));
+
+
     return (
         <div className="flex bg-gray-50 min-h-screen">
             
             <Sidebar /> 
 
-            {/* Main Content Wrapper */}
             <main className="flex-1 p-4 sm:p-8 overflow-y-auto">
                 
                 <div className="max-w-5xl mx-auto">
                     
-                    {/* Header & Back Button */}
+                    {/* (Header, Title, Tabs - ไม่ได้แก้ไข) */}
                     <div className="mb-6">
                         <Link 
                             to="/subject" 
@@ -388,8 +460,6 @@ export default function ExamPlanDetail() {
                             กลับไปหน้ารวม
                         </Link>
                     </div>
-
-                    {/* Title */}
                     <div className="mb-8">
                         <h1 className="text-4xl font-bold text-gray-900 mb-2">
                             {plan.exam_title}
@@ -398,8 +468,6 @@ export default function ExamPlanDetail() {
                             วันที่สอบ: {examDate} เวลา {examTime}
                         </p>
                     </div>
-
-                    {/* Tab Switcher */}
                     <div className="mb-6">
                         <div className="inline-flex rounded-lg shadow-sm bg-white p-1">
                             <button
@@ -424,7 +492,7 @@ export default function ExamPlanDetail() {
                                 `}
                             >
                                 <ListBulletIcon className="h-5 w-5 inline mr-1.5" />
-                                รายละเอียดข้อมูล
+                                ความคืบหน้า
                             </button>
                         </div>
                     </div>
@@ -433,7 +501,8 @@ export default function ExamPlanDetail() {
                     <div>
                         {activeTab === 'checklist' && (
                             <ChecklistView 
-                                chapters={chapterDetails}
+                                groupedChapters={groupedChapters}
+                                sortedDates={sortedDates}
                                 onStatusChange={handleStatusChange}
                                 onSave={handleSaveProgress}
                                 isSaving={isSaving}
@@ -441,7 +510,7 @@ export default function ExamPlanDetail() {
                         )}
                         {activeTab === 'calendar' && (
                             <CalendarView 
-                                chapterDetails={chapterDetails}
+                                chapterDetails={chapterDetails} 
                                 examDate={plan.exam_date}
                                 completedChapters={completedChapters}
                                 totalChapters={totalChapters}
