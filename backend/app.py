@@ -12,7 +12,17 @@ app.secret_key = 'your_secret_key'
 
 CORS(app, supports_credentials=True, origins=['http://localhost:5173'])  # React port
 
+study_plan_data = [
+    { "date": "2025-11-29", "startTime": "09:00", "endTime": "17:00", "subject": "คณิต" },
+    { "date": "2025-11-30", "startTime": "09:00", "endTime": "17:00", "subject": "วิทย์" }
+]
 
+@app.route('/api/study_plan', methods=['GET'])
+def get_study_plan():
+    """
+    API endpoint เพื่อส่งข้อมูลตารางเรียนทั้งหมด
+    """
+    return jsonify(study_plan_data)
 app.register_blueprint(register_bp)
 app.register_blueprint(login_bp)
 app.register_blueprint(planner_bp)

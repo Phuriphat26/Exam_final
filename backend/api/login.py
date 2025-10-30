@@ -29,3 +29,9 @@ def check_login():
     if 'user_id' in session:
         return jsonify({'logged_in': True, 'username': session.get['username']})
     return jsonify({'logged_in': False})
+
+@login_bp.route('/logout', methods=['POST'])
+@cross_origin(supports_credentials=True, origins=['http://localhost:5173'])
+def logout():
+    session.clear()
+    return jsonify({'success': True})

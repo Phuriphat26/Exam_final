@@ -1,341 +1,456 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { useParams, Link } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
-import { ArrowLeftIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
 
-// Import date-fns สำหรับปฏิทิน (ต้อง npm install date-fns)
-import { format, getDaysInMonth, startOfMonth, getDay, addMonths, subMonths, isSameDay } from 'date-fns';
-import { th } from 'date-fns/locale'; // Import ภาษาไทย
+import React, { useState, useEffect } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import axios from 'axios';
+import Sidebar from "../components/Sidebar"; // นำเข้า Sidebar
+import { 
+    ArrowLeftIcon, 
+    CalendarDaysIcon, 
+    CheckCircleIcon,
+    ListBulletIcon
+} from '@heroicons/react/24/outline';
+import { CheckCircleIcon as CheckCircleIconSolid } from '@heroicons/react/24/solid';
 
 // --- (Helper Functions) ---
 
-// 1. Function แปลง Date object เป็น "30 ตุลาคม 2568"
-const formatExamDate = (date) => {
-    if (!date || isNaN(date)) return "ไม่ระบุวันที่";
-    return format(date, 'd MMMM yyyy', { locale: th });
-};
-
-// 2. Function แปลง Date object เป็น "YYYY-MM-DD" (สำหรับเทียบ key)
-const toDateString = (date) => {
-    return format(date, 'yyyy-MM-dd');
-};
-
-// 3. Function แปลงเวลา "09:00" / "12:00" เป็น "09:00 - 12:00"
-const formatExamTime = (start, end) => {
-    if (!start || !end) return "";
-    return `${start} - ${end}`; 
-};
-
-
-// --- (Sub-components) ---
-
-// 1. Donut Chart (เวอร์ชัน SVG ที่แก้ไขแล้ว)
-const DonutChart = ({ percentage, label, color }) => {
-    // --- (ส่วนคำนวณ) ---
-    const radius = 60; // รัศมี
-    const strokeWidth = 12; // ความหนาของเส้น
-    const normalizedRadius = radius - strokeWidth / 2;
-    const circumference = normalizedRadius * 2 * Math.PI;
+// Helper for formatting exam date and time
+const formatExamDateTime = (dateString) => {
+    if (!dateString) return { date: "ไม่ระบุวันที่", time: "ไม่ระบุเวลา" };
     
-    // ป้องกันค่า % ที่ผิดพลาด (ให้อยู่ระหว่าง 0-100)
-    const safePercentage = Math.max(0, Math.min(percentage || 0, 100));
-    const offset = circumference - (safePercentage / 100) * circumference;
-
-    // --- (ส่วนสี) ---
-    // ตัวแปรนี้จะถูกใช้โดย <circle> ใน SVG
-    const ringColor = 
-        color === 'blue' ? 'stroke-blue-500' :
-        color === 'red' ? 'stroke-red-400' : 'stroke-gray-300';
+    const date = new Date(dateString);
+    const dateOptions = {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'Asia/Bangkok'
+    };
+    const timeOptions = {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true, // ใช้ AM/PM
+        timeZone: 'Asia/Bangkok'
+    };
     
-    const bgColor = 
-        color === 'blue' ? 'bg-blue-50' :
-        color === 'red' ? 'bg-red-50' : 'bg-gray-50';
-
-    return (
-        <div className={`flex flex-col items-center justify-center p-6 rounded-2xl shadow-sm ${bgColor}`}>
-            <div className="relative w-40 h-40">
-                <svg
-                    height="100%"
-                    width="100%"
-                    viewBox="0 0 140 140" // 140 = (radius + padding) * 2
-                    className="transform -rotate-90" // หมุน 90 องศา ให้ 0% เริ่มที่ด้านบน
-                >
-                    {/* 1. วงกลมพื้นหลัง (สีเทาอ่อน) */}
-                    <circle
-                        stroke="#E5E7EB" // bg-gray-200
-                        fill="transparent"
-                        strokeWidth={strokeWidth}
-                        r={normalizedRadius}
-                        cx={70} // กึ่งกลาง (140/2)
-                        cy={70} // กึ่งกลาง (140/2)
-                    />
-                    {/* 2. วงกลม % (ทับอยู่ด้านบน) */}
-                    <circle
-                        className={`${ringColor} transition-all duration-500`}
-                        fill="transparent"
-                        strokeWidth={strokeWidth}
-                        strokeDasharray={`${circumference} ${circumference}`}
-                        // (นี่คือจุดที่ใช้ตัวแปร offset)
-                        style={{ strokeDashoffset: offset }} 
-                        r={normalizedRadius}
-                        cx={70}
-                        cy={70}
-                        strokeLinecap="round" // ทำให้ปลายเส้นมน
-                    />
-                </svg>
-                {/* ตัวเลข % ที่แสดงตรงกลาง */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-4xl font-bold text-gray-800">{safePercentage}%</span>
-                </div>
-            </div>
-            
-            <span className="mt-4 text-lg font-semibold text-gray-700">{label}</span>
-        </div>
-    );
+    return {
+        date: date.toLocaleDateString('th-TH', dateOptions),
+        time: date.toLocaleTimeString('th-TH', timeOptions).replace(' ', '') // '09:00 AM'
+    };
 };
 
-// 2. Calendar Grid
-const StudyCalendar = ({ studySlots = [], examDateStr }) => {
-    //
-    // --- (A) สมมติฐานข้อมูล ---
-    // 1. examDateStr: "2025-10-30T00:00:00"
-    // 2. studySlots: [
-    //      { date: "2025-10-06", status: "read" },
-    //      { date: "2025-10-08", status: "read" },
-    //      { date: "2025-10-13", status: "not_read" },
-    //      ...
-    //    ]
-    //
-    const examDate = new Date(examDateStr);
-    const [currentMonth, setCurrentMonth] = useState(startOfMonth(examDate));
+// Helper for formatting chapter date
+const formatChapterDate = (dateString) => {
+    if (!dateString) return "ไม่ระบุวันที่";
+    const date = new Date(dateString);
+    const options = {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'Asia/Bangkok'
+    };
+    return date.toLocaleDateString('th-TH', options);
+};
 
-    // สร้าง Map เพื่อค้นหา Status ได้เร็ว
-    const statusMap = new Map();
-    studySlots.forEach(slot => {
-        statusMap.set(slot.date, slot.status);
-    });
+// Helper to check if two dates are the same day (ignores time)
+const isSameDay = (d1, d2) => {
+    if (!d1 || !d2) return false;
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate();
+};
 
-    // สร้างตารางปฏิทิน
-    const daysInMonth = getDaysInMonth(currentMonth);
-    const startDayOfWeek = getDay(currentMonth); // 0=Sun, 1=Mon...
-    const dayHeaders = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
-    const blankDays = Array(startDayOfWeek).fill(null);
-    const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-
-    // Render Logic
-    const renderDay = (day) => {
-        if (!day) {
-            return <div key={`blank-${Math.random()}`} className="h-12 w-12"></div>;
+// --- (Calendar Component) ---
+const CalendarView = ({ chapterDetails, examDate, completedChapters, totalChapters }) => {
+    
+    // --- State สำหรับปฏิทิน ---
+    const getInitialDate = () => {
+        if (chapterDetails && chapterDetails.length > 0 && chapterDetails[0].date) {
+            return new Date(chapterDetails[0].date);
         }
+        if (examDate) return new Date(examDate);
+        return new Date();
+    };
+    const [displayDate, setDisplayDate] = useState(getInitialDate());
 
-        const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-        const dateString = toDateString(date);
-        
-        const status = statusMap.get(dateString);
-        const isExamDay = isSameDay(date, examDate);
-
-        let dayClasses = "h-12 w-12 flex items-center justify-center rounded-lg ";
-        if (isExamDay) {
-            dayClasses += "bg-yellow-200 text-yellow-800 font-bold";
-        } else if (status === 'read') {
-            dayClasses += "bg-green-200 text-green-800";
-        } else if (status === 'not_read') {
-            dayClasses += "bg-red-200 text-red-800";
-        } else {
-            dayClasses += "bg-gray-200 text-gray-700"; // วันที่ไม่มีในแผน
-        }
-
-        return (
-            <div key={dateString} className={dayClasses}>
-                {day}
-            </div>
-        );
+    // --- Helpers สำหรับปฏิทิน ---
+    const handlePrevMonth = () => {
+        setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() - 1, 1));
+    };
+    const handleNextMonth = () => {
+        setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() + 1, 1));
     };
 
-    return (
-        <div className="bg-blue-50 p-6 rounded-2xl shadow-sm">
-            {/* Header: October 2025 */}
-            <div className="flex justify-between items-center mb-4">
-                <button 
-                    onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                    className="p-2 rounded-full hover:bg-blue-100"
-                >
-                    <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
-                </button>
-                <h3 className="text-xl font-bold text-gray-800">
-                    {format(currentMonth, 'MMMM yyyy', { locale: th })}
-                </h3>
-                <button 
-                    onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                    className="p-2 rounded-full hover:bg-blue-100"
-                >
-                    <ChevronRightIcon className="h-5 w-5 text-gray-600" />
-                </button>
-            </div>
+    const monthName = displayDate.toLocaleDateString('th-TH', { month: 'long', timeZone: 'Asia/Bangkok' });
+    const year = displayDate.toLocaleDateString('th-TH', { year: 'numeric', timeZone: 'Asia/Bangkok' });
+    const weekdays = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
+
+    // --- สร้าง Array ของวันในปฏิทิน ---
+    const getCalendarDays = () => {
+        const yearNum = displayDate.getFullYear();
+        const monthNum = displayDate.getMonth(); 
+
+        const firstDayOfMonth = new Date(yearNum, monthNum, 1);
+        const daysInMonth = new Date(yearNum, monthNum + 1, 0).getDate();
+        
+        const startDayOfWeek = (firstDayOfMonth.getDay() + 6) % 7;
+
+        const daysArray = [];
+        for (let i = 0; i < startDayOfWeek; i++) {
+            daysArray.push(null); // Placeholder for empty cells
+        }
+        for (let i = 1; i <= daysInMonth; i++) {
+            daysArray.push(new Date(yearNum, monthNum, i));
+        }
+        return daysArray;
+    };
+
+    const days = getCalendarDays();
+    const examDateObj = examDate ? new Date(examDate) : null;
+
+    // --- ตรรกะการแสดงสีของวัน ---
+    const getDayStatus = (date) => {
+        if (!date) return 'bg-transparent'; 
+
+        // ตรวจสอบวันสอบก่อน (มีลำดับความสำคัญสูงสุด)
+        if (examDateObj && isSameDay(date, examDateObj)) {
+            return 'bg-yellow-300 text-yellow-900 font-semibold'; // วันสอบ
+        }
+
+        // ตรวจสอบว่ามีบทที่ต้องอ่านในวันนี้หรือไม่
+        const chaptersOnThisDay = chapterDetails.filter(ch => {
+            return ch.date && isSameDay(new Date(ch.date), date);
+        });
+
+        if (chaptersOnThisDay.length > 0) {
+            const allCompleted = chaptersOnThisDay.every(ch => ch.is_completed === true);
             
-            {/* Grid ปฏิทิน */}
-            <div className="grid grid-cols-7 gap-2 text-center">
-                {/* หัว (จ อ พ...) */}
-                {dayHeaders.map(header => (
-                    <div key={header} className="font-semibold text-gray-500 text-sm">
-                        {header}
-                    </div>
-                ))}
+            if (allCompleted) {
+                return 'bg-green-300 text-green-900 font-medium'; // อ่านแล้ว (ทุกบท)
+            } else {
+                return 'bg-pink-300 text-pink-900 font-medium'; // ยังไม่อ่าน
+            }
+        }
+        
+        return 'bg-gray-100 text-gray-600'; // วันปกติ (ไม่มีกิจกรรม)
+    };
+
+    const completedPercent = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
+    const pendingPercent = 100 - completedPercent;
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            {/* Calendar Card */}
+            <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-lg">
+                <h3 className="text-xl font-semibold text-gray-800 mb-4">ตารางการอ่าน</h3>
                 
-                {/* วันที่ (ช่องว่าง + วันที่) */}
-                {blankDays.map(renderDay)}
-                {daysArray.map(renderDay)}
+                {/* Calendar Header */}
+                <div className="flex justify-between items-center mb-4">
+                    <button 
+                        onClick={handlePrevMonth}
+                        className="p-2 rounded-full hover:bg-gray-100"
+                    >
+                        <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
+                    </button>
+                    <span className="font-semibold">{monthName} {year}</span>
+                    <button 
+                        onClick={handleNextMonth}
+                        className="p-2 rounded-full hover:bg-gray-100"
+                    >
+                        <ArrowLeftIcon className="h-5 w-5 text-gray-600 transform rotate-180" />
+                    </button>
+                </div>
+
+                {/* Calendar Grid */}
+                <div className="grid grid-cols-7 gap-1 text-center">
+                    {weekdays.map(wd => (
+                        <div key={wd} className="text-xs font-medium text-gray-500 mb-2">{wd}</div>
+                    ))}
+                    {days.map((date, index) => (
+                        <div 
+                            key={index} 
+                            className={`
+                                ${getDayStatus(date)} 
+                                h-10 w-10 flex items-center justify-center rounded-lg text-sm
+                            `}
+                        >
+                            {date ? date.getDate() : ''}
+                        </div>
+                    ))}
+                </div>
+                 {/* Legend */}
+                 <div className="flex justify-start gap-4 mt-6 flex-wrap">
+                    <div className="flex items-center">
+                        <span className="h-4 w-4 bg-green-300 rounded mr-2"></span>
+                        <span className="text-sm text-gray-600">อ่านแล้ว</span>
+                    </div>
+                    <div className="flex items-center">
+                        <span className="h-4 w-4 bg-pink-300 rounded mr-2"></span>
+                        <span className="text-sm text-gray-600">ยังไม่อ่าน</span>
+                    </div>
+                    <div className="flex items-center">
+                        <span className="h-4 w-4 bg-yellow-300 rounded mr-2"></span>
+                        <span className="text-sm text-gray-600">วันสอบ</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Progress Cards */}
+            <div className="md:col-span-1 space-y-6">
+                {/* Level Up */}
+                <div className="bg-blue-100 p-6 rounded-2xl shadow-lg flex justify-between items-center">
+                    <div>
+                        <h4 className="font-semibold text-blue-800">Level Up</h4>
+                        <p className="text-sm text-blue-700">ความคืบหน้า</p>
+                    </div>
+                    <div className="text-3xl font-bold text-blue-800">
+                        {completedPercent}%
+                    </div>
+                </div>
+                {/* Pending */}
+                <div className="bg-red-100 p-6 rounded-2xl shadow-lg flex justify-between items-center">
+                    <div>
+                        <h4 className="font-semibold text-red-800">บทที่ยังไม่ได้อ่าน</h4>
+                        <p className="text-sm text-red-700">ที่เหลือ</p>
+                    </div>
+                    <div className="text-3xl font-bold text-red-800">
+                        {pendingPercent}%
+                    </div>
+                </div>
             </div>
         </div>
     );
 };
 
-// --- (Main Component) ---
+// --- (Checklist Component) ---
+const ChecklistView = ({ chapters, onStatusChange, onSave, isSaving }) => {
+    return (
+        <div className="bg-white p-6 rounded-2xl shadow-lg">
+            <h3 className="text-xl font-semibold text-gray-800 mb-6">รายละเอียดข้อมูล</h3>
+            
+            <div className="space-y-6">
+                {chapters.length > 0 ? chapters.map((chapter) => (
+                    <div key={chapter._id} className="pb-4 border-b border-gray-100 last:border-b-0">
+                        <h4 className="text-lg font-semibold text-gray-700">{chapter.chapter_name}</h4>
+                        <p className="text-sm text-gray-500 mb-3">
+                            {formatChapterDate(chapter.date)} เวลา {chapter.startTime} - {chapter.endTime}
+                        </p>
+                        
+                        <label className="flex items-center cursor-pointer">
+                            <input 
+                                type="checkbox"
+                                className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                checked={chapter.is_completed}
+                                onChange={(e) => onStatusChange(chapter._id, e.target.checked)}
+                            />
+                            <span className="ml-3 text-gray-700">อ่านแล้ว</span>
+                        </label>
+                    </div>
+                )) : (
+                    <p className="text-gray-500">ไม่พบรายละเอียดบทเรียน</p>
+                )}
+            </div>
 
-export default function ExamPlanDetailPage() {
-    const { planId } = useParams(); // ดึง ID จาก URL (เช่น /exam-plan/THIS_ID)
+            <div className="mt-8 text-right">
+                <button
+                    onClick={onSave}
+                    disabled={isSaving}
+                    className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 disabled:opacity-50"
+                >
+                    {isSaving ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+// --- (Main Detail Component) ---
+
+export default function ExamPlanDetail() {
+    const { id } = useParams();
     const [plan, setPlan] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [activeTab, setActiveTab] = useState('calendar'); // 'calendar' or 'checklist'
+    
+    // State สำหรับ Checkbox
+    const [chapterDetails, setChapterDetails] = useState([]);
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         const fetchPlanDetail = async () => {
-            if (!planId) return;
             setIsLoading(true);
+            setError(null);
             try {
-                // --- (สำคัญ) ---
-                // Endpoint นี้ต้องส่งข้อมูลแบบละเอียด
                 const response = await axios.get(
-                    `http://localhost:5000/calender/api/exam-plans/${planId}`, 
+                    `http://localhost:5000/calender/api/exam-plan/${id}`, 
                     { withCredentials: true }
                 );
-                
-                // --- (โครงสร้างข้อมูลที่คาดหวังจาก API) ---
-                // response.data = {
-                //   _id: "...",
-                //   exam_title: "System Analysis and Designs",
-                //   exam_date: "2025-10-30T00:00:00",
-                //   exam_start_time: "09:00",
-                //   exam_end_time: "12:00",
-                //   progress_percentage: 20, // (20%)
-                //   study_slots: [
-                //     { date: "2025-10-06", status: "read" },
-                //     { date: "2025-10-13", status: "not_read" },
-                //     ...
-                //   ]
-                // }
-                
                 setPlan(response.data);
-                console.log("Fetched plan detail:", response.data);
-
+                if (response.data.study_plan_detail) {
+                    setChapterDetails(response.data.study_plan_detail);
+                }
             } catch (err) {
-                console.error("❌ Failed to fetch plan detail:", err);
-                setError("ไม่สามารถดึงข้อมูลแผนการสอบได้");
+                console.error("❌ Failed to fetch exam plan detail:", err);
+                setError("ไม่สามารถดึงข้อมูลแผนการสอบนี้ได้");
             } finally {
                 setIsLoading(false);
             }
         };
 
         fetchPlanDetail();
-    }, [planId]);
+    }, [id]);
+
+    // Handler เมื่อติ๊ก Checkbox
+    const handleStatusChange = (chapterId, isCompleted) => {
+        setChapterDetails(prevDetails => 
+            prevDetails.map(ch => 
+                ch._id === chapterId ? { ...ch, is_completed: isCompleted } : ch
+            )
+        );
+    };
+
+    // Handler เมื่อกด "บันทึก"
+    const handleSaveProgress = async () => {
+        setIsSaving(true);
+        try {
+            await axios.put(
+                `http://localhost:5000/calender/api/exam-plan/${id}/progress`,
+                { chapters: chapterDetails },
+                { withCredentials: true }
+            );
+        } catch (err) {
+            console.error("❌ Failed to save progress:", err);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // คำนวณ % ความคืบหน้า
+    const totalChapters = chapterDetails.length;
+    const completedChapters = chapterDetails.filter(ch => ch.is_completed).length;
+
+    // --- (Render) ---
 
     if (isLoading) {
-        return <div className="flex h-screen items-center justify-center">กำลังโหลด...</div>;
+        return (
+            <div className="flex bg-gray-50 min-h-screen">
+                <Sidebar />
+                <main className="flex-1 p-8 text-center text-blue-600">
+                    กำลังโหลดข้อมูล...
+                </main>
+            </div>
+        );
     }
 
     if (error) {
-        return <div className="flex h-screen items-center justify-center">{error}</div>;
+        return (
+            <div className="flex bg-gray-50 min-h-screen">
+                <Sidebar />
+                <main className="flex-1 p-8 text-center text-red-500">
+                    {error}
+                </main>
+            </div>
+        );
     }
 
     if (!plan) {
-        return <div className="flex h-screen items-center justify-center">ไม่พบข้อมูล</div>;
+        return (
+            <div className="flex bg-gray-50 min-h-screen">
+                <Sidebar />
+                <main className="flex-1 p-8 text-center text-gray-500">
+                    ไม่พบข้อมูลแผนการสอบ
+                </main>
+            </div>
+        );
     }
 
-    // คำนวณ % ที่เหลือ
-    const remainingPercentage = 100 - (plan.progress_percentage || 0);
+    const { date: examDate, time: examTime } = formatExamDateTime(plan.exam_date);
 
     return (
-        <div className="flex bg-gray-100 min-h-screen">
-            <Sidebar />
+        <div className="flex bg-gray-50 min-h-screen">
             
-            <div className="flex-1 p-4 sm:p-8">
-                <div className="max-w-6xl mx-auto">
+            <Sidebar /> 
+
+            {/* Main Content Wrapper */}
+            <main className="flex-1 p-4 sm:p-8 overflow-y-auto">
+                
+                <div className="max-w-5xl mx-auto">
                     
-                    {/* Header: "ติดตามความคืบหน้าการอ่าน" */}
-                    <div className="flex items-center mb-6">
-                        <Link to="/exam-plans" className="p-2 rounded-full hover:bg-gray-200 mr-2">
-                            <ArrowLeftIcon className="h-6 w-6 text-gray-700" />
+                    {/* Header & Back Button */}
+                    <div className="mb-6">
+                        <Link 
+                            to="/subject" 
+                            className="inline-flex items-center text-gray-600 hover:text-gray-900"
+                        >
+                            <ArrowLeftIcon className="h-5 w-5 mr-2" />
+                            กลับไปหน้ารวม
                         </Link>
-                        <h1 className="text-3xl font-bold text-gray-800">
-                            ติดตามความคืbหน้าการอ่าน
+                    </div>
+
+                    {/* Title */}
+                    <div className="mb-8">
+                        <h1 className="text-4xl font-bold text-gray-900 mb-2">
+                            {plan.exam_title}
                         </h1>
+                        <p className="text-lg text-gray-600">
+                            วันที่สอบ: {examDate} เวลา {examTime}
+                        </p>
                     </div>
 
-                    {/* Main Content Card */}
-                    <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-lg">
-                        
-                        {/* Title & Date */}
-                        <div className="flex flex-col sm:flex-row justify-between sm:items-start mb-6 gap-4">
-                            <div>
-                                <h2 className="text-3xl font-bold text-gray-900">
-                                    {plan.exam_title}
-                                </h2>
-                                <p className="text-lg text-gray-600 mt-1">
-                                    วันที่สอบ: {formatExamDate(new Date(plan.exam_date))} 
-                                    เวลา {formatExamTime(plan.exam_start_time, plan.exam_end_time)}
-                                </p>
-                            </div>
-                            {/* Legend (คำอธิบายสี) */}
-                            <div className="flex flex-row sm:flex-col flex-wrap gap-2 text-sm">
-                                <div className="flex items-center">
-                                    <span className="h-4 w-4 rounded-full bg-green-200 mr-2"></span>
-                                    <span>อ่านแล้ว</span>
-                                </div>
-                                <div className="flex items-center">
-                                    <span className="h-4 w-4 rounded-full bg-red-200 mr-2"></span>
-                                    <span>ยังไม่ได้อ่าน</span>
-                                </div>
-                                <div className="flex items-center">
-                                    <span className="h-4 w-4 rounded-full bg-yellow-200 mr-2"></span>
-                                    <span>วันสอบ</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Calendar & Stats Grid */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            
-                            {/* Calendar (คอลัมน์ซ้าย) */}
-                            <div className="lg:col-span-2">
-                                <h3 className="text-xl font-semibold text-gray-800 mb-4">
-                                    ตารางการอ่าน
-                                </h3>
-                                <StudyCalendar 
-                                    studySlots={plan.study_slots} 
-                                    examDateStr={plan.exam_date}
-                                />
-                            </div>
-
-                            {/* Stats (คอลัมน์ขวา) */}
-                            <div className="flex flex-col space-y-6">
-                                <DonutChart 
-                                    percentage={plan.progress_percentage || 0} 
-                                    label="Level Up"
-                                    color="blue"
-                                />
-                                <DonutChart 
-                                    percentage={remainingPercentage}
-                                    label="บทที่ยังไม่ได้อ่าน"
-                                    color="red"
-                                />
-                            </div>
-
+                    {/* Tab Switcher */}
+                    <div className="mb-6">
+                        <div className="inline-flex rounded-lg shadow-sm bg-white p-1">
+                            <button
+                                onClick={() => setActiveTab('calendar')}
+                                className={`
+                                    px-6 py-2 rounded-md font-semibold text-sm
+                                    ${activeTab === 'calendar' 
+                                        ? 'bg-blue-600 text-white' 
+                                        : 'text-gray-700 hover:bg-gray-50'}
+                                `}
+                            >
+                                <CalendarDaysIcon className="h-5 w-5 inline mr-1.5" />
+                                ตารางการอ่าน
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('checklist')}
+                                className={`
+                                    px-6 py-2 rounded-md font-semibold text-sm
+                                    ${activeTab === 'checklist' 
+                                        ? 'bg-blue-600 text-white' 
+                                        : 'text-gray-700 hover:bg-gray-50'}
+                                `}
+                            >
+                                <ListBulletIcon className="h-5 w-5 inline mr-1.5" />
+                                รายละเอียดข้อมูล
+                            </button>
                         </div>
                     </div>
+
+                    {/* Tab Content */}
+                    <div>
+                        {activeTab === 'checklist' && (
+                            <ChecklistView 
+                                chapters={chapterDetails}
+                                onStatusChange={handleStatusChange}
+                                onSave={handleSaveProgress}
+                                isSaving={isSaving}
+                            />
+                        )}
+                        {activeTab === 'calendar' && (
+                            <CalendarView 
+                                chapterDetails={chapterDetails}
+                                examDate={plan.exam_date}
+                                completedChapters={completedChapters}
+                                totalChapters={totalChapters}
+                            />
+                        )}
+                    </div>
+
                 </div>
-            </div>
+            </main>
         </div>
     );
 }
