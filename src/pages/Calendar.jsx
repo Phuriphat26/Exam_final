@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import Sidebar from "../components/Sidebar"; // (ปิดไว้ก่อน ถ้าไม่มีไฟล์นี้)
+import Sidebar from "../components/Sidebar"; // 💡[FIX] แก้ไขโดยการ comment out บรรทัดนี้
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
 
-// Function ช่วยสร้างวันที่
+// --- (Helper Functions - ไม่ได้แก้ไข) ---
+
 const getDaysInMonth = (year, month) => {
     const date = new Date(year, month, 1);
     const days = [];
@@ -18,7 +19,6 @@ const getMonthStartDay = (year, month) => {
     return new Date(year, month, 1).getDay();
 };
 
-// ✅ [FIX] ฟังก์ชันสำหรับแปลง Local Date เป็น "YYYY-MM-DD" โดยไม่สน Timezone
 const getLocalDateString = (dateObj) => {
     const year = dateObj.getFullYear();
     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -28,78 +28,101 @@ const getLocalDateString = (dateObj) => {
 
 
 export default function Calendar() {
-    // ⭐️ [แก้ไข] ตั้งค่าเริ่มต้นเป็นเดือนตุลาคม 2025 เพื่อให้ตรงกับตัวอย่าง
+    // ⭐️ [แก้ไข] ตั้งค่าเริ่มต้นเป็นเดือนตุลาคม 2025
     const [currentDate, setCurrentDate] = useState(new Date('2025-10-01'));
 
-    // State สำหรับเก็บข้อมูลตาราง
-    const [scheduleMap, setScheduleMap] = useState(new Map());
+    // 💡 [1. เพิ่ม State]
+    const [allPlans, setAllPlans] = useState([]); // เก็บรายชื่อแผนทั้งหมด (สำหรับ Dropdown)
+    const [selectedPlanId, setSelectedPlanId] = useState(""); // เก็บ ID ของแผนที่เลือก
+    
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // [1] ดึงข้อมูลตารางจาก Backend
+    // 💡 [2. แก้ไข useEffect] 
+    // ดึง "รายชื่อแผนทั้งหมด" มาเพื่อสร้าง Dropdown
     useEffect(() => {
-        const fetchSchedule = async () => {
+        const fetchAllPlans = async () => {
             setIsLoading(true);
             setError(null);
             try {
                 const response = await axios.get(
-                    "http://localhost:5000/calender/api/exam-plans/", // <-- ใช้ URL ที่ถูกต้องตาม Blueprint
+                    "http://localhost:5000/calender/api/exam-plans/",
                     { withCredentials: true }
                 );
 
-                const newMap = new Map();
-
-                response.data.forEach(plan => {
-                    const scheduleSlots = plan.study_plan || plan.generated_schedule;
-
-                    if (scheduleSlots && Array.isArray(scheduleSlots)) {
-                        scheduleSlots.forEach(slot => {
-                            const existingSlots = newMap.get(slot.date) || [];
-                            newMap.set(slot.date, [...existingSlots, slot]);
-                        });
-                    } else {
-                        console.warn(`Plan (ID: ${plan._id || 'N/A'}) ไม่มี 'study_plan' หรือ 'generated_schedule' ที่เป็น Array`);
-                        console.log("Data ที่มีปัญหา:", scheduleSlots);
-                    }
-
-                    // [เพิ่มใหม่] ตรวจสอบและเพิ่มวันสอบ (exam_date)
-                    if (plan.exam_date && plan.exam_title) {
-                        const examDateString = plan.exam_date; // "YYYY-MM-DD"
-                        
-                        const examSlot = {
-                            date: examDateString,
-                            subject: `สอบ: ${plan.exam_title}`,
-                            startTime: "!!",
-                            endTime: "",
-                            isExam: true
-                        };
-
-                        const existingSlots = newMap.get(examDateString) || [];
-                        newMap.set(examDateString, [examSlot, ...existingSlots]);
-                    }
-                });
-
-                setScheduleMap(newMap);
-                console.log("✅ Fetched and mapped schedule:", newMap);
+                if (response.data && response.data.length > 0) {
+                    setAllPlans(response.data); // เก็บรายชื่อแผนทั้งหมด
+                    setSelectedPlanId(response.data[0]._id); // เลือกแผนแรกเป็นค่าเริ่มต้น
+                } else {
+                    setError("ไม่พบแผนการสอบ");
+                }
 
             } catch (err) {
-                console.error("❌ Failed to fetch schedule:", err);
-                if (err.response) {
-                    console.error("Error data:", err.response.data);
-                    console.error("Error status:", err.response.status);
-                    setError(`ไม่สามารถดึงข้อมูล: ${err.response.data.message || err.message}`);
-                } else {
-                    console.error("JavaScript Error during processing:", err.message);
-                    setError(`เกิดข้อผิดพลาดในการประมวลผลข้อมูล: ${err.message}`);
-                }
+                console.error("❌ Failed to fetch plans list:", err);
+                setError(`ไม่สามารถดึงข้อมูลแผน: ${err.response?.data?.message || err.message}`);
             } finally {
                 setIsLoading(false);
             }
         };
 
-        fetchSchedule();
+        fetchAllPlans();
     }, []); // <-- ดึงข้อมูลครั้งเดียวตอนเริ่ม
 
+    // 💡 [3. ใช้ useMemo] 
+    // สร้าง scheduleMap ใหม่ "ทุกครั้งที่" selectedPlanId เปลี่ยน
+    const scheduleMap = useMemo(() => {
+        const newMap = new Map();
+
+        if (!selectedPlanId || allPlans.length === 0) {
+            return newMap; // ถ้ายังไม่มีแผน หรือยังไม่ได้เลือก ก็คืนค่า Map ว่าง
+        }
+
+        // ค้นหาแผนที่เลือกจาก 'allPlans'
+        const selectedPlan = allPlans.find(p => p._id === selectedPlanId);
+        if (!selectedPlan) {
+            return newMap; // ไม่พบแผนที่เลือก
+        }
+        
+        // --- เริ่ม Logic เดิม (แต่ทำกับ 'selectedPlan' แค่แผนเดียว) ---
+        
+        const scheduleSlots = selectedPlan.study_plan || selectedPlan.generated_schedule;
+
+        if (scheduleSlots && Array.isArray(scheduleSlots)) {
+            scheduleSlots.forEach(slot => {
+                // ✅ [FIX] ใช้ 'slot.date' (ที่เป็น YYYY-MM-DD)
+                const dateKey = slot.date.split('T')[0]; // เอาแค่ YYYY-MM-DD
+                const existingSlots = newMap.get(dateKey) || [];
+                newMap.set(dateKey, [...existingSlots, slot]);
+            });
+        } else {
+            console.warn(`Plan (ID: ${selectedPlan._id}) ไม่มี 'study_plan'`);
+        }
+
+        // เพิ่มวันสอบ (exam_date)
+        if (selectedPlan.exam_date && selectedPlan.exam_title) {
+            const examDateString = selectedPlan.exam_date.split('T')[0]; // เอาแค่ YYYY-MM-DD
+            
+            const examSlot = {
+                date: examDateString,
+                subject: `สอบ: ${selectedPlan.exam_title}`,
+                startTime: "!!",
+                endTime: "",
+                isExam: true
+            };
+
+            const existingSlots = newMap.get(examDateString) || [];
+            // [แก้ไข] ใส่ examSlot ไว้ "อันแรก" เพื่อให้เด่นชัด
+            newMap.set(examDateString, [examSlot, ...existingSlots]);
+        }
+        // --- จบ Logic เดิม ---
+
+        console.log(`✅ Re-mapped schedule for plan: ${selectedPlan.exam_title}`, newMap);
+        return newMap;
+
+    }, [allPlans, selectedPlanId]); // <-- ให้คำนวณใหม่เมื่อ 2 ค่านี้เปลี่ยน
+
+
+    // --- (Logic Calendar Grid - ไม่ได้แก้ไข) ---
     const calendarGrid = useMemo(() => {
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
@@ -129,20 +152,50 @@ export default function Calendar() {
 
     return (
         <div className="flex bg-gray-50 min-h-screen">
-            {/* ⭐️ [คืนค่า] กลับไปใช้แบบเดิม */}
-            { <Sidebar /> } {/* ปิดไว้ก่อน */}
+            {  <Sidebar />  } 
 
             <div className="flex-1 p-4 sm:p-8">
                 <div
                     className="max-w-5xl mx-auto bg-white rounded-2xl shadow-lg p-6 sm:p-8"
                     style={{ background: 'linear-gradient(to bottom right, #eff6ff, #f9faff)' }}
                 >
-                    {/* Calendar Header (ตามภาพ) */}
-                    <h1 className="text-4xl font-bold text-center text-blue-800 mb-8">
+                    <h1 className="text-4xl font-bold text-center text-blue-800 mb-6">
                         Calendar
                     </h1>
 
-                    {/* Navigation */}
+                    {/* 💡 [4. เพิ่ม Dropdown] */}
+                    <div className="mb-6 max-w-sm mx-auto">
+                        <label 
+                            htmlFor="plan-select" 
+                            className="block text-sm font-medium text-gray-700 mb-1"
+                        >
+                            เลือกแผน:
+                        </label>
+                        <select
+                            id="plan-select"
+                            value={selectedPlanId}
+                            onChange={(e) => setSelectedPlanId(e.target.value)}
+                            disabled={isLoading || allPlans.length === 0}
+                            className="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm 
+                                       focus:outline-none focus:ring-blue-500 focus:border-blue-500 
+                                       disabled:bg-gray-100"
+                        >
+                            {isLoading ? (
+                                <option>กำลังโหลดแผน...</option>
+                            ) : error ? (
+                                <option>ไม่พบแผน</option>
+                            ) : (
+                                allPlans.map(plan => (
+                                    <option key={plan._id} value={plan._id}>
+                                        {plan.exam_title}
+                                    </option>
+                                ))
+                            )}
+                        </select>
+                    </div>
+
+
+                    {/* Navigation (เหมือนเดิม) */}
                     <div className="flex items-center justify-between mb-4">
                         <button
                             onClick={goToPrevMonth}
@@ -161,14 +214,14 @@ export default function Calendar() {
                         </button>
                     </div>
 
-                    {/* Day Headers (อา, จ, อ, ...) */}
+                    {/* Day Headers (เหมือนเดิม) */}
                     <div className="grid grid-cols-7 gap-2 text-center font-semibold text-gray-600 mb-2">
                         {dayHeaders.map(day => (
                             <div key={day} className="py-2">{day}</div>
                         ))}
                     </div>
 
-                    {/* Calendar Grid */}
+                    {/* Calendar Grid (เหมือนเดิม) */}
                     {isLoading ? (
                         <div className="text-center py-10 text-blue-600">กำลังโหลด...</div>
                     ) : error ? (
@@ -181,7 +234,8 @@ export default function Calendar() {
                                 }
 
                                 const dateString = getLocalDateString(day.date);
-                                const daySchedule = scheduleMap.get(dateString); // ดึงข้อมูลจาก Map
+                                // ✅ Logic นี้จะดึงข้อมูลจาก scheduleMap ที่คำนวณใหม่แล้ว
+                                const daySchedule = scheduleMap.get(dateString); 
 
                                 return (
                                     <div
@@ -190,7 +244,7 @@ export default function Calendar() {
                                     >
                                         <span className="font-semibold text-gray-800">{day.date.getDate()}</span>
 
-                                        {/* Show schedule slots */}
+                                        {/* Show schedule slots (เหมือนเดิม) */}
                                         {daySchedule && (
                                             <div className="mt-1 space-y-1 overflow-y-auto pr-1">
                                                 {daySchedule.map((slot, i) => {
@@ -222,3 +276,4 @@ export default function Calendar() {
         </div>
     );
 }
+

@@ -6,8 +6,8 @@ from bson.errors import InvalidId
 from datetime import datetime
 import os
 import math
-import uuid  # 1. Import เพิ่ม
-from collections import Counter # 2. Import เพิ่ม
+import uuid 
+from collections import Counter 
 
 
 def generate_weighted_schedule(subjects, study_slots):
@@ -84,7 +84,12 @@ def generate_weighted_schedule(subjects, study_slots):
 
 # --- Setup Blueprint และ Database ---
 planner_bp = Blueprint("planner_bp", __name__)
-CORS(planner_bp, supports_credentials=True)
+
+# (--- [FIX] ---)
+# แก้ไขบรรทัดนี้เพื่ออนุญาต "PUT" (สำหรับแก้ไข)
+CORS(planner_bp, supports_credentials=True, methods=["GET", "POST", "PUT", "DELETE"])
+# (--- [END FIX] ---)
+
 
 client = MongoClient(os.getenv("MONGODB_URI", "mongodb://localhost:27017/"))
 db = client["mydatabase"]
@@ -121,7 +126,7 @@ def get_user_subjects():
                     if chapter_count > 0:
                         # สร้าง List ["บทที่ 1", "บทที่ 2", ..., "บทที่ 5"]
                         final_topics = [f"บทที่ {i+1}" for i in range(chapter_count)]
-                    
+                
                 except (ValueError, TypeError):
                     # ถ้าฟิลด์ 'subject' ไม่ใช่ตัวเลข (เช่น "Math") ก็ไม่ต้องทำอะไร
                     final_topics = [] 
@@ -140,65 +145,9 @@ def get_user_subjects():
         print(f"[ERROR] get_user_subjects: {e}")
         return jsonify({"message": "เกิดข้อผิดพลาดในการดึงข้อมูลวิชา", "error": str(e)}), 500
 
-
-@planner_bp.route("/api/exam-plan/", methods=["POST"])
-def add_exam_plan():
-    if "user_id" not in session:
-        return jsonify({"message": "กรุณา login ก่อน"}), 401
-
-    try:
-        data = request.json
-        print(f"[INFO] Received data: {data}")
-
-        required_fields = ["examTitle", "examDate", "studyPlan", "examSubjects"]
-        missing_fields = [field for field in required_fields if field not in data]
-
-        if missing_fields:
-            return jsonify({"message": f"ข้อมูลไม่ครบถ้วน: ขาด {', '.join(missing_fields)}"}), 400
-
-        exam_subjects = data["examSubjects"]
-
-        if not isinstance(exam_subjects, list) or not exam_subjects:
-            return jsonify({"message": "กรุณาระบุวิชาที่สอบอย่างน้อย 1 วิชา"}), 400
-
-        for subject in exam_subjects:
-            if not isinstance(subject, dict) or 'name' not in subject or 'priority' not in subject:
-                return jsonify({"message": "โครงสร้างข้อมูลวิชาไม่ถูกต้อง"}), 400
-
-        study_plan_slots = data["studyPlan"]
-        if not isinstance(study_plan_slots, list) or not study_plan_slots:
-            return jsonify({"message": "กรุณาระบุวันเตรียมตัวสอบอย่างน้อย 1 วัน"}), 400
-
-        print("[INFO] Generating weighted schedule...")
-        scheduled_plan = generate_weighted_schedule(exam_subjects, study_plan_slots)
-        print(f"[SUCCESS] Schedule generated with {len(scheduled_plan)} slots.")
-
-        user_id = session["user_id"]
-        
-        new_plan = {
-            "user_id": ObjectId(user_id),
-            "exam_title": data["examTitle"],
-            "subjects": exam_subjects,
-            "exam_date": data["examDate"],
-            "study_plan": scheduled_plan,
-            "createdAt": datetime.utcnow(),
-            "status": "active"
-        }
-
-        print(f"[INFO] Inserting new plan for user {user_id}")
-        result = exam_plans_collection.insert_one(new_plan)
-        print(f"[SUCCESS] Plan saved with ID: {result.inserted_id}")
-        
-        return jsonify({
-            "message": "บันทึกและจัดตารางเรียนเรียบร้อยแล้ว",
-            "plan_id": str(result.inserted_id),
-        }), 201
-
-    except Exception as e:
-        import traceback
-        print(f"[ERROR] add_exam_plan: {e}\n{traceback.format_exc()}")
-        return jsonify({"message": "เกิดข้อผิดพลาดในการบันทึกแผน", "error": str(e)}), 500
-
+# (--- [EDIT] ---)
+# ลบ Route ที่ซ้ำซ้อน (BUG) อันเก่าออกแล้ว
+# (--- [END EDIT] ---)
 
 @planner_bp.route("/api/exam-plans/", methods=["GET"])
 def get_exam_plans():
@@ -220,32 +169,9 @@ def get_exam_plans():
         return jsonify({"message": "เกิดข้อผิดพลาด"}), 500
     
 
-@planner_bp.route("/api/exam-plan/<plan_id>", methods=["GET"])
-def get_single_exam_plan(plan_id):
-    if "user_id" not in session:
-        return jsonify({"message": "กรุณา login ก่อน"}), 401
-
-    try:
-        user_id = ObjectId(session["user_id"])
-        
-        plan = exam_plans_collection.find_one({
-            "_id": ObjectId(plan_id),
-            "user_id": user_id
-        })
-
-        if not plan:
-            return jsonify({"message": "ไม่พบแผนการสอบนี้"}), 404
-        
-        plan["_id"] = str(plan["_id"])
-        plan["user_id"] = str(plan["user_id"])
-        
-        return jsonify(plan), 200
-    
-    except InvalidId:
-        return jsonify({"message": "ID ของแผนไม่ถูกต้อง"}), 400
-    except Exception as e:
-        print(f"[ERROR] get_single_exam_plan: {e}")
-        return jsonify({"message": "เกิดข้อผิดพลาดในการดึงข้อมูล"}), 500
+# (--- [EDIT] ---)
+# ลบ Route ที่ซ้ำซ้อน (BUG) อันเก่าออกแล้ว
+# (--- [END EDIT] ---)
 
 
 @planner_bp.route("/api/exam-plan/<plan_id>/slot/<slot_id>", methods=["PUT"])
@@ -416,3 +342,155 @@ def update_plan_progress(plan_id):
     except Exception as e:
         print(f"[ERROR] update_plan_progress: {e}")
         return jsonify({"message": "เกิดข้อผิดพลาดในการบันทึก"}), 500
+
+# นี่คือ Route POST (สร้างใหม่) ที่ถูกต้อง
+@planner_bp.route("/api/exam-plan/", methods=["POST"])
+def add_exam_plan():
+    if "user_id" not in session:
+        return jsonify({"message": "กรุณา login ก่อน"}), 401
+
+    try:
+        data = request.json
+        print(f"[INFO] Received data: {data}")
+
+        required_fields = ["examTitle", "examDate", "studyPlan", "examSubjects"]
+        missing_fields = [field for field in required_fields if field not in data]
+
+        if missing_fields:
+            return jsonify({"message": f"ข้อมูลไม่ครบถ้วน: ขาด {', '.join(missing_fields)}"}), 400
+
+        exam_subjects = data["examSubjects"]
+
+        if not isinstance(exam_subjects, list) or not exam_subjects:
+            return jsonify({"message": "กรุณาระบุวิชาที่สอบอย่างน้อย 1 วิชา"}), 400
+
+        study_plan_slots = data["studyPlan"]
+        if not isinstance(study_plan_slots, list) or not study_plan_slots:
+            return jsonify({"message": "กรุณาระบุวันเตรียมตัวสอบอย่างน้อย 1 วัน"}), 400
+
+        print("[INFO] Generating weighted schedule...")
+        scheduled_plan = generate_weighted_schedule(exam_subjects, study_plan_slots)
+        print(f"[SUCCESS] Schedule generated with {len(scheduled_plan)} slots.")
+
+        user_id = session["user_id"]
+        
+        new_plan = {
+            "user_id": ObjectId(user_id),
+            "exam_title": data["examTitle"],
+            "subjects": exam_subjects,
+            "exam_date": data["examDate"],
+            "study_plan": scheduled_plan,
+            # [NEW] เพิ่มข้อมูลจาก Frontend เพื่อให้ดึงกลับไปแก้ไขได้ง่าย
+            "prep_start_date": data.get("prepStartDate"),
+            "prep_end_date": data.get("prepEndDate"),
+            "default_start_time": data.get("defaultStartTime"),
+            "default_end_time": data.get("defaultEndTime"),
+            "send_notifications": data.get("sendNotifications", True),
+            "raw_study_plan_input": study_plan_slots, # [NEW] บันทึก input ดิบเผื่อใช้
+            # [End NEW]
+            "createdAt": datetime.utcnow() # [EDIT] แก้ไขเล็กน้อย
+        }
+
+        result = exam_plans_collection.insert_one(new_plan)
+        
+        # (ส่วนของการส่ง Email/Notification ควรอยู่ที่นี่ ถ้าคุณจะทำ)
+        
+        return jsonify({"message": "บันทึกแผนการเตรียมสอบสำเร็จ!", "planId": str(result.inserted_id)}), 201
+
+    except Exception as e:
+        print(f"[ERROR] add_exam_plan: {e}")
+        return jsonify({"message": "เกิดข้อผิดพลาดในการบันทึกข้อมูล", "error": str(e)}), 500
+
+# นี่คือ Route GET (ดึงแผนเดียว) ที่ถูกต้อง
+@planner_bp.route("/api/exam-plan/<string:plan_id>", methods=["GET"])
+def get_exam_plan(plan_id):
+    if "user_id" not in session:
+        return jsonify({"message": "กรุณา login ก่อน"}), 401
+
+    try:
+        # ตรวจสอบว่า plan_id ถูกต้องและเป็นของผู้ใช้คนนี้
+        plan = exam_plans_collection.find_one({
+            "_id": ObjectId(plan_id),
+            "user_id": ObjectId(session["user_id"])
+        })
+
+        if not plan:
+            return jsonify({"message": "ไม่พบแผนการสอบนี้ หรือคุณไม่มีสิทธิ์เข้าถึง"}), 404
+
+        # แปลงข้อมูล Mongo (ObjectId, datetime) ให้เป็น JSON
+        plan["_id"] = str(plan["_id"])
+        plan["user_id"] = str(plan["user_id"])
+        if "createdAt" in plan:
+            plan["createdAt"] = plan["createdAt"].isoformat()
+            
+        return jsonify(plan), 200
+
+    except InvalidId:
+        return jsonify({"message": "ID แผนการสอบไม่ถูกต้อง"}), 400
+    except Exception as e:
+        print(f"[ERROR] get_exam_plan: {e}")
+        return jsonify({"message": "เกิดข้อผิดพลาดในการดึงข้อมูล", "error": str(e)}), 500
+
+# --- [NEW] Endpoint PUT (บันทึกการแก้ไข) ---
+@planner_bp.route("/api/exam-plan/<string:plan_id>", methods=["PUT"])
+def update_exam_plan(plan_id):
+    if "user_id" not in session:
+        return jsonify({"message": "กรุณา login ก่อน"}), 401
+
+    try:
+        data = request.json
+        
+        # ตรวจสอบว่า plan_id ถูกต้องและเป็นของผู้ใช้คนนี้
+        existing_plan = exam_plans_collection.find_one({
+            "_id": ObjectId(plan_id),
+            "user_id": ObjectId(session["user_id"])
+        })
+
+        if not existing_plan:
+            return jsonify({"message": "ไม่พบแผนการสอบนี้ หรือคุณไม่มีสิทธิ์เข้าถึง"}), 404
+            
+        # ตรวจสอบข้อมูลที่ส่งมา (เหมือนตอน POST)
+        required_fields = ["examTitle", "examDate", "studyPlan", "examSubjects"]
+        missing_fields = [field for field in required_fields if field not in data]
+        if missing_fields:
+            return jsonify({"message": f"ข้อมูลไม่ครบถ้วน: ขาด {', '.join(missing_fields)}"}), 400
+
+        # สร้างตารางใหม่ตามข้อมูลที่แก้ไข
+        exam_subjects = data["examSubjects"]
+        study_plan_slots = data["studyPlan"]
+        
+        print("[INFO] Re-generating weighted schedule for update...")
+        updated_scheduled_plan = generate_weighted_schedule(exam_subjects, study_plan_slots)
+        print(f"[SUCCESS] Updated schedule generated with {len(updated_scheduled_plan)} slots.")
+
+        # เตรียมข้อมูลที่จะอัปเดต
+        update_fields = {
+            "exam_title": data["examTitle"],
+            "subjects": exam_subjects,
+            "exam_date": data["examDate"],
+            "study_plan": updated_scheduled_plan, # ใช้ตารางที่ gen ใหม่
+            
+            # อัปเดตข้อมูล input ที่ใช้สร้างด้วย
+            "prep_start_date": data.get("prepStartDate"),
+            "prep_end_date": data.get("prepEndDate"),
+            "default_start_time": data.get("defaultStartTime"),
+            "default_end_time": data.get("defaultEndTime"),
+            "send_notifications": data.get("sendNotifications", True),
+            "raw_study_plan_input": study_plan_slots,
+            "updatedAt": datetime.utcnow() # เพิ่ม field updatedAt
+        }
+
+        # บันทึกทับข้อมูลเดิม
+        exam_plans_collection.update_one(
+            {"_id": ObjectId(plan_id)},
+            {"$set": update_fields}
+        )
+
+        return jsonify({"message": "อัปเดตแผนการเตรียมสอบสำเร็จ!"}), 200
+
+    except InvalidId:
+        return jsonify({"message": "ID แผนการสอบไม่ถูกต้อง"}), 400
+    except Exception as e:
+        print(f"[ERROR] update_exam_plan: {e}")
+        return jsonify({"message": "เกิดข้อผิดพลาดในการอัปเดตข้อมูล", "error": str(e)}), 500
+

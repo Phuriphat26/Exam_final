@@ -46,7 +46,7 @@ export default function Sidebar() {
         <nav className="flex flex-col gap-2 px-4">
           {/* 4. เปลี่ยน Link เป็น NavLink และใช้ className แบบฟังก์ชัน */}
           {/* 5. เพิ่ม 'end' ให้ Dashboard เพื่อไม่ให้มัน active ตลอดเวลา (เพราะ / ไปซ้ำกับ /Calendar) */}
-          <NavLink to="/" className={getNavLinkClass} end>
+          <NavLink to="/home" className={getNavLinkClass} end>
             Dashboard
           </NavLink>
           <NavLink to="/Calendar" className={getNavLinkClass}>

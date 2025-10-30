@@ -27,7 +27,7 @@ app.secret_key = 'your_secret_key'
 from dotenv import load_dotenv 
 
 load_dotenv()
-CORS(app, supports_credentials=True, origins=['http://localhost:5173']) 
+CORS(app, supports_credentials=True, origins=['http://localhost:5173'], methods=["GET", "POST", "PUT", "DELETE"])
 
 # (ข้อมูลเทสของคุณ - ไม่ได้แก้ไข)
 study_plan_data = [
