@@ -33,7 +33,7 @@ export default function StudyPlannerLogin() {
       }
     } catch (err) {
       console.error('Login error:', err);
-      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ โปรดลองอีกครั้ง');
+      alert(' ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
     }
   };
 
