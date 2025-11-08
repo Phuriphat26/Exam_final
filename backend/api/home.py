@@ -2,7 +2,7 @@ import os
 from flask import Blueprint, jsonify
 from pymongo import MongoClient
 # import [datetime, date, time] จาก [datetime]
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta # ✅ [แก้ไข] 1: Import เพิ่ม
 from bson.objectid import ObjectId, InvalidId 
 
 # --- 1. เชื่อมต่อ MongoDB (ใช้ localhost ตามที่เคยคุยกัน) ---
@@ -34,10 +34,10 @@ def get_all_plans():
     (สำหรับใส่ใน Dropdown)
     """
     try:
-        # ค้นหาทุกแผน, แต่เอามาแค่ _id และ exam_title
+        # ค้นหาทุกแผน, แต่เอามาแค่ _id, exam_title และ status
         plans_cursor = exam_plans_collection.find(
             {}, 
-            {"_id": 1, "exam_title": 1} 
+            {"_id": 1, "exam_title": 1, "status": 1} # ✅ [แก้ไข] 2: เพิ่ม "status": 1
         )
         
         plan_list = []
@@ -45,7 +45,8 @@ def get_all_plans():
             plan_list.append({
                 "_id": str(plan["_id"]),
                 # (Frontend คาดหวัง field นี้)
-                "exam_title": plan.get("exam_title", "แผนไม่มีชื่อ") 
+                "exam_title": plan.get("exam_title", "แผนไม่มีชื่อ"),
+                "status": plan.get("status", None) # ✅ [แก้ไข] 2: เพิ่ม field status
             })
             
         return jsonify(plan_list)
@@ -74,9 +75,9 @@ def get_study_summary_by_id(plan_id):
         # 2. ดึง study_plan (array) จากแผนนั้น
         study_plan = active_plan.get("study_plan", [])
         
-        # 3. นับจำนวนวิชาทั้งหมด (จาก collection 'subject')
-        # (Frontend คาดหวัง 'subject_count')
-        total_subjects = subjects_collection.count_documents({})
+        # 3. [แก้ไข] นับจำนวนวิชาจาก field 'subjects' ใน plan นี้
+        subjects_in_this_plan = active_plan.get("subjects", [])
+        total_subjects = len(subjects_in_this_plan) # ✅ [แก้ไข] 3: แก้ไข logic การนับวิชา
 
         # --- 4. ประมวลผลข้อมูล ---
         today = date.today()
@@ -114,9 +115,16 @@ def get_study_summary_by_id(plan_id):
                     end_t = datetime.strptime(end_time_str, '%H:%M').time()
                     
                     # ใช้วันที่ dummy เพื่อคำนวณ timedelta
-                    duration = datetime.combine(date.min, end_t) - datetime.combine(date.min, start_t)
+                    duration_delta = datetime.combine(date.min, end_t) - datetime.combine(date.min, start_t)
                     
-                    total_duration_minutes += duration.total_seconds() / 60
+                    duration_seconds = duration_delta.total_seconds()
+                    
+                    # ✅ [Enhancement] ถ้าระยะเวลาติดลบ (เช่น 22:00 - 01:00) ให้บวก 24 ชม.
+                    if duration_seconds < 0:
+                        duration_seconds += 86400  # 24 * 60 * 60
+
+                    total_duration_minutes += duration_seconds / 60
+                    
                 except ValueError:
                     print(f"ข้ามเวลาผิดรูปแบบ: {start_time_str} or {end_time_str}")
                     continue
@@ -125,7 +133,7 @@ def get_study_summary_by_id(plan_id):
         summary = {
             "days_read": days_read,
             "days_remaining": days_remaining,
-            "subject_count": total_subjects,
+            "subject_count": total_subjects, # <-- ใช้ค่าที่แก้ไขแล้ว
             "today_study": today_study,
             "total_duration_minutes": total_duration_minutes 
         }
@@ -136,4 +144,3 @@ def get_study_summary_by_id(plan_id):
     except Exception as e:
         print(f"เกิดข้อผิดพลาดใน /study_summary/<plan_id>: {e}")
         return jsonify({"error": str(e)}), 500
-

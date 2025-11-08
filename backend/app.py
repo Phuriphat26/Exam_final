@@ -19,6 +19,7 @@ from api.subject import subject_bp
 from api.calender import calender_bp
 from api.home import home_bp
 from api.time import api_bp
+from api.admin import admin_bp
 # (Import 'mail' และ 'send_notification_email' จาก email_service)
 from api.email_service import mail, send_notification_email
 
@@ -47,6 +48,7 @@ app.register_blueprint(subject_bp)
 app.register_blueprint(calender_bp)
 app.register_blueprint(home_bp)
 app.register_blueprint(api_bp)
+app.register_blueprint(admin_bp)
 
 # -----------------------------------------------------------------------------
 # 1. SETUP FLASK-MAIL (ไม่ได้แก้ไข)

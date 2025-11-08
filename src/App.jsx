@@ -19,6 +19,7 @@ import './index.css';
 import Timer from "./pages/Time";
 import ExamPlannerEdit from "./pages/ExamPlannerEdit";
 import Subjectedit from "./pages/Subjectedit";
+import Admin from "./pages/Admin";
 
 function App() {
   return (
@@ -29,13 +30,13 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/home" element={<Home />} />
-        
+        <Route path="/home" element={<Home />} />
         {/* Route for adding new item */}
-        <Route path="/add" element={<AddNew />} /> 
-        
+        <Route path="/Admin" element={<Admin/>} /> 
+    
         {/* [EDIT] เพิ่ม Route นี้เพื่อให้ปุ่ม "จัดตาราง" (จาก Subject.js) ทำงาน */}
         {/* Note: This route is functionally identical to /add. Keep one or the other. I'll keep it as you explicitly mentioned it. */}
-        <Route path="/create-plan" element={<AddNew />} />
+        <Route path="/add" element={<AddNew />} />
         
         <Route path="/Profile" element={<Profile />} />
         <Route path="/subject" element={<Subject />} />

@@ -1,16 +1,12 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom'; // 1. รวม imports
-import axios from 'axios';                         // 1. รวม imports
+import { useNavigate, Link } from 'react-router-dom';
+import axios from 'axios';
 
 export default function StudyPlannerLogin() {
-  // 2. ใช้ State เดิมจากไฟล์ UI
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  
-  // 3. เรียกใช้ useNavigate hook
   const navigate = useNavigate();
 
-  // 4. นำ Logic การ Login มารวมใน handleLogin
   const handleLogin = async (e) => {
     e.preventDefault();
 
@@ -20,26 +16,44 @@ export default function StudyPlannerLogin() {
     }
 
     try {
-      const res = await axios.post('http://localhost:5000/login/', 
-        { username, password }, // ส่ง state ปัจจุบัน
+      const res = await axios.post('http://localhost:5000/login/',
+        { username, password },
         { withCredentials: true }
       );
 
       if (res.data.success) {
+        // --- ⭐️ ส่วนสำคัญที่เพิ่มเข้ามา ⭐️ ---
+        // ถ้ามี user_id ส่งมา ให้เก็บลง localStorage
+        if (res.data.user_id) {
+            localStorage.setItem('userId', res.data.user_id);
+        }
+        // --------------------------------
+
         alert('เข้าสู่ระบบสำเร็จ');
-        navigate('/home'); // เปลี่ยนหน้าไป Dashboard
+
+        if (res.data.role === 'admin') {
+          navigate('/Admin');
+        } else {
+          navigate('/home');
+        }
+
       } else {
         alert(res.data.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
       }
+
     } catch (err) {
       console.error('Login error:', err);
-      alert(' ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+      // Backend (Flask) ส่ง 401 กลับมา axios จะเข้า catch block นี้
+      if (err.response && err.response.data && err.response.data.message) {
+          alert(err.response.data.message);
+      } else {
+          alert('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+      }
     }
   };
 
   const handleGoogleLogin = () => {
     console.log('Google login clicked');
-    // เพิ่ม logic สำหรับ Google Login ที่นี่
   };
 
   return (
@@ -49,10 +63,10 @@ export default function StudyPlannerLogin() {
         <div className="max-w-md text-center">
           <h1 className="text-5xl font-bold text-gray-800 mb-4">EXAM PLANNER</h1>
           <div className="flex justify-center">
-            <img 
+            <img
               className='icons max-w-xs mx-auto'
               src="/icons.jpg"
-              alt="Study Illustration" 
+              alt="Study Illustration"
             />
           </div>
         </div>
@@ -62,7 +76,7 @@ export default function StudyPlannerLogin() {
       <div className="w-1/2 flex items-center justify-center p-12 bg-gradient-to-br from-blue-100 via-purple-50 to-yellow-50">
         <div className="w-full max-w-md">
           <h2 className="text-3xl font-bold text-center mb-12">LOG IN</h2>
-          
+
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <input
@@ -73,7 +87,7 @@ export default function StudyPlannerLogin() {
                 className="w-full px-6 py-4 rounded-full border-2 border-gray-300 bg-white text-gray-800 focus:border-gray-800 focus:outline-none"
               />
             </div>
-            
+
             <div>
               <input
                 type="password"
@@ -83,7 +97,7 @@ export default function StudyPlannerLogin() {
                 className="w-full px-6 py-4 rounded-full border-2 border-gray-300 bg-white text-gray-800 focus:border-gray-800 focus:outline-none"
               />
             </div>
-            
+
             <button
               type="submit"
               className="w-full bg-blue-700 text-white py-4 rounded-full font-semibold text-lg hover:bg-blue-800 transition-colors"
@@ -91,21 +105,20 @@ export default function StudyPlannerLogin() {
               LOG IN
             </button>
           </form>
-          
+
           <div className="text-center mt-6">
             ยังไม่มีบัญชีใช่ไหม{' '}
-            {/* 5. เปลี่ยนจาก <a> เป็น <Link> */}
-            <Link to="/signup" className="text-blue-600 hover:underline font-semibold"> 
-              Sign Up 
+            <Link to="/signup" className="text-blue-600 hover:underline font-semibold">
+              Sign Up
             </Link>
           </div>
-          
+
           <div className="flex items-center my-8">
             <div className="flex-1 border-t border-gray-300"></div>
             <span className="px-4 text-gray-500">- or continue with -</span>
             <div className="flex-1 border-t border-gray-300"></div>
           </div>
-          
+
           <button
             onClick={handleGoogleLogin}
             className="w-full bg-white border-2 border-gray-200 py-4 rounded-full font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-3"
