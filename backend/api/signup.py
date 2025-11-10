@@ -33,7 +33,7 @@ def register():
         'username': username,
         'email': email,
         'password': hashed_password,  # บันทึกรหัสที่เข้ารหัสแล้ว
-        'role': 'admin'                # เพิ่ม role 'user'
+        'role': 'user'                # เพิ่ม role 'user'
     })
 
     return jsonify({'message': 'สมัครสมาชิกสำเร็จ'}), 200
